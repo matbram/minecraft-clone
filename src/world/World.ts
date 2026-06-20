@@ -9,6 +9,7 @@ import { Block } from '../core/BlockTypes';
 import { Chunk } from '../core/Chunk';
 import { templateFor, type FeatureDecision } from '../core/features';
 import { chunkKey } from './chunkKey';
+import { LightEngine } from './LightEngine';
 
 interface PendingBlock {
   lx: number;
@@ -28,8 +29,15 @@ export class World {
   // Set by ChunkManager: notified whenever a (loaded) chunk needs re-meshing.
   onDirty: (cx: number, cz: number) => void = () => {};
 
+  private readonly lightEngine = new LightEngine(this);
+
   constructor(seed: number) {
     this.seed = seed;
+  }
+
+  // Compute light for a freshly generated chunk (sets chunk.lit, marks dirty).
+  lightChunk(chunk: Chunk): void {
+    this.lightEngine.initChunkLight(chunk);
   }
 
   getChunkKey = chunkKey;
@@ -64,6 +72,7 @@ export class World {
     const chunk = this.getChunk(cx, cz);
     if (!chunk) return;
 
+    const oldB = chunk.getBlock(lx, wy, lz); // capture BEFORE the change for lighting
     chunk.setBlock(lx, wy, lz, type);
 
     const key = chunkKey(cx, cz);
@@ -74,13 +83,13 @@ export class World {
     }
     m.set(idx(lx, wy, lz), type);
 
-    this.queueLightUpdate(wx, wy, wz); // Phase 3 hook (no-op for now)
+    this.queueLightUpdate(wx, wy, wz, oldB, type);
     this.markDirtyAround(cx, cz, lx, lz);
   }
 
-  // Phase 3 hook: incremental light updates. No-op in Phase 0.
-  queueLightUpdate(_wx: number, _wy: number, _wz: number): void {
-    /* intentionally empty until Phase 3 */
+  // Incremental light update on a block edit (remove + add for sky and block).
+  queueLightUpdate(wx: number, wy: number, wz: number, oldB: Block, newB: Block): void {
+    this.lightEngine.onBlockChange(wx, wy, wz, oldB, newB);
   }
 
   // --- finalize helpers (run when a freshly generated chunk arrives) -------

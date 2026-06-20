@@ -71,3 +71,14 @@ export const FLY_SPRINT_MULT = 3;
 export const REACH = 5; // block interaction distance
 export const INSTANT_BREAK = false; // true = creative instant break
 export const BREAK_STAGES = 10; // crack overlay stages
+
+// ---------------------------------------------------------------------------
+// Phase 3: lighting.
+// ---------------------------------------------------------------------------
+export const MAX_LIGHT = 15;
+export const SKY_DEFAULT = 15; // light above the world top
+export const MAX_LIGHT_PER_FRAME = 3; // chunks fully (re)lit per frame (throttle)
+export const LIGHT_AMBIENT = 0.06; // uAmbient: cave floor so dark != pure black
+export const DAY_FACTOR_DEFAULT = 1.0; // uDayFactor: full day (Phase 4a animates)
+// Ambient-occlusion brightness by occlusion level (0 = darkest corner .. 3 = open).
+export const AO_CURVE = [0.45, 0.65, 0.85, 1.0];

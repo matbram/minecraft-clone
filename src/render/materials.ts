@@ -4,6 +4,7 @@
 // updating them once per frame updates both. Only uAlphaTest differs per pass.
 
 import * as THREE from 'three';
+import { DAY_FACTOR_DEFAULT, LIGHT_AMBIENT } from '../core/constants';
 import vertexShader from './shaders/block.vert.glsl?raw';
 import fragmentShader from './shaders/block.frag.glsl?raw';
 
@@ -15,6 +16,8 @@ export interface Materials {
     uFogColor: { value: THREE.Color };
     uFogDensity: { value: number };
     uTime: { value: number };
+    uDayFactor: { value: number };
+    uAmbient: { value: number };
   };
 }
 
@@ -24,6 +27,8 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uFogColor: { value: fogColor },
     uFogDensity: { value: 0.0145 },
     uTime: { value: 0 },
+    uDayFactor: { value: DAY_FACTOR_DEFAULT },
+    uAmbient: { value: LIGHT_AMBIENT },
   };
 
   const opaque = new THREE.ShaderMaterial({

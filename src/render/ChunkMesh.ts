@@ -4,21 +4,22 @@
 //   neighbors drawn).
 // - Skips empty air above the chunk's maxY.
 // - Splits geometry into opaque vs alpha-blended (water/glass) passes.
-// - Emits a per-vertex `light` attribute. Phase 0 bakes constant per-FACE shade
-//   for shape readability; Phase 3 replaces it with propagated + smooth light
-//   WITHOUT changing the vertex layout.
+// - Bakes SMOOTH lighting + ambient occlusion per vertex into a vec3 `light`
+//   attribute: (skyLight 0..1, blockLight 0..1, ao 0..1). The shader combines
+//   them as max(block, sky*day)*ao.
 
-import { CX, CZ, CY, mod, worldToChunk } from '../core/constants';
-import { Block, IS_TRANSPARENT, tileOf } from '../core/BlockTypes';
+import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT } from '../core/constants';
+import { Block, IS_TRANSPARENT, tileOf, ATLAS_COLS } from '../core/BlockTypes';
+import type { Chunk } from '../core/Chunk';
+import { idx } from '../core/constants';
 import type { World } from '../world/World';
-import { ATLAS_COLS } from '../core/BlockTypes';
 import { ATLAS_ROWS, TILE_PX } from './atlas';
 
 export interface MeshArrays {
   positions: Float32Array;
   normals: Float32Array;
+  light: Float32Array; // 3 floats/vertex: sky, block, ao
   uvs: Float32Array;
-  light: Float32Array;
   indices: Uint32Array;
 }
 
@@ -33,49 +34,20 @@ const NEEDS_BLEND = new Set<number>([Block.WATER, Block.GLASS]);
 
 interface FaceDef {
   n: [number, number, number];
-  shade: number;
-  v: [number, number, number][]; // 4 corners (block-min relative)
+  u: [number, number, number]; // in-plane axis A
+  v: [number, number, number]; // in-plane axis B
+  corners: [number, number, number][]; // 4 block-min-relative corner offsets
   uv: [number, number][]; // 4 corner (cu, cv); cv=1 is texture-top
 }
 
 // Face order: 0:+X 1:-X 2:+Y 3:-Y 4:+Z 5:-Z
 const FACES: FaceDef[] = [
-  {
-    n: [1, 0, 0],
-    shade: 0.6,
-    v: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]],
-    uv: [[0, 0], [0, 1], [1, 1], [1, 0]],
-  },
-  {
-    n: [-1, 0, 0],
-    shade: 0.6,
-    v: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]],
-    uv: [[0, 0], [1, 0], [1, 1], [0, 1]],
-  },
-  {
-    n: [0, 1, 0],
-    shade: 1.0,
-    v: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]],
-    uv: [[0, 0], [0, 1], [1, 1], [1, 0]],
-  },
-  {
-    n: [0, -1, 0],
-    shade: 0.5,
-    v: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]],
-    uv: [[0, 0], [1, 0], [1, 1], [0, 1]],
-  },
-  {
-    n: [0, 0, 1],
-    shade: 0.8,
-    v: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]],
-    uv: [[0, 0], [1, 0], [1, 1], [0, 1]],
-  },
-  {
-    n: [0, 0, -1],
-    shade: 0.8,
-    v: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]],
-    uv: [[0, 0], [0, 1], [1, 1], [1, 0]],
-  },
+  { n: [1, 0, 0], u: [0, 0, 1], v: [0, 1, 0], corners: [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], uv: [[0, 0], [0, 1], [1, 1], [1, 0]] },
+  { n: [-1, 0, 0], u: [0, 0, 1], v: [0, 1, 0], corners: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], uv: [[0, 0], [1, 0], [1, 1], [0, 1]] },
+  { n: [0, 1, 0], u: [1, 0, 0], v: [0, 0, 1], corners: [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], uv: [[0, 0], [0, 1], [1, 1], [1, 0]] },
+  { n: [0, -1, 0], u: [1, 0, 0], v: [0, 0, 1], corners: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], uv: [[0, 0], [1, 0], [1, 1], [0, 1]] },
+  { n: [0, 0, 1], u: [1, 0, 0], v: [0, 1, 0], corners: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], uv: [[0, 0], [1, 0], [1, 1], [0, 1]] },
+  { n: [0, 0, -1], u: [1, 0, 0], v: [0, 1, 0], corners: [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], uv: [[0, 0], [0, 1], [1, 1], [1, 0]] },
 ];
 
 const INSET_U = 0.5 / (ATLAS_COLS * TILE_PX);
@@ -91,14 +63,14 @@ export function shouldRenderFace(cur: Block, nbr: Block): boolean {
 interface Accum {
   positions: number[];
   normals: number[];
-  uvs: number[];
   light: number[];
+  uvs: number[];
   indices: number[];
   count: number;
 }
 
 function newAccum(): Accum {
-  return { positions: [], normals: [], uvs: [], light: [], indices: [], count: 0 };
+  return { positions: [], normals: [], light: [], uvs: [], indices: [], count: 0 };
 }
 
 function finalize(a: Accum): MeshArrays | null {
@@ -106,8 +78,8 @@ function finalize(a: Accum): MeshArrays | null {
   return {
     positions: new Float32Array(a.positions),
     normals: new Float32Array(a.normals),
-    uvs: new Float32Array(a.uvs),
     light: new Float32Array(a.light),
+    uvs: new Float32Array(a.uvs),
     indices: new Uint32Array(a.indices),
   };
 }
@@ -124,25 +96,44 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
   const baseX = cx * CX;
   const baseZ = cz * CZ;
 
-  // Neighbor-aware block lookup using cached chunk refs (no Map hits inner loop).
-  const blockAt = (wx: number, wy: number, wz: number): Block => {
-    if (wy < 0 || wy >= CY) return Block.AIR;
+  // Neighbor-aware chunk lookup (cached refs for the 4 orthogonal neighbors;
+  // diagonal corners fall back to a Map hit).
+  const chunkAt = (wx: number, wz: number): Chunk | undefined => {
     const ccx = worldToChunk(wx);
     const ccz = worldToChunk(wz);
-    let chunk;
-    if (ccx === cx && ccz === cz) chunk = self;
-    else if (ccx === cx + 1) chunk = cxp;
-    else if (ccx === cx - 1) chunk = cxm;
-    else if (ccz === cz + 1) chunk = czp;
-    else if (ccz === cz - 1) chunk = czm;
-    else chunk = world.getChunk(ccx, ccz);
-    if (!chunk) return Block.AIR;
-    return chunk.getBlock(mod(wx, CX), wy, mod(wz, CZ));
+    if (ccx === cx && ccz === cz) return self;
+    if (ccx === cx + 1 && ccz === cz) return cxp;
+    if (ccx === cx - 1 && ccz === cz) return cxm;
+    if (ccx === cx && ccz === cz + 1) return czp;
+    if (ccx === cx && ccz === cz - 1) return czm;
+    return world.getChunk(ccx, ccz);
+  };
+
+  const blockAt = (wx: number, wy: number, wz: number): Block => {
+    if (wy < 0 || wy >= CY) return Block.AIR;
+    const chunk = chunkAt(wx, wz);
+    return chunk ? chunk.getBlock(mod(wx, CX), wy, mod(wz, CZ)) : Block.AIR;
+  };
+  const opaqueAt = (wx: number, wy: number, wz: number): boolean => !IS_TRANSPARENT[blockAt(wx, wy, wz)];
+  const skyAt = (wx: number, wy: number, wz: number): number => {
+    if (wy >= CY) return SKY_DEFAULT;
+    if (wy < 0) return 0;
+    const chunk = chunkAt(wx, wz);
+    return chunk ? chunk.getSky(idx(mod(wx, CX), wy, mod(wz, CZ))) : SKY_DEFAULT;
+  };
+  const blockLightAt = (wx: number, wy: number, wz: number): number => {
+    if (wy < 0 || wy >= CY) return 0;
+    const chunk = chunkAt(wx, wz);
+    return chunk ? chunk.getBlockLight(idx(mod(wx, CX), wy, mod(wz, CZ))) : 0;
   };
 
   const opaque = newAccum();
   const transparent = newAccum();
   const maxY = self.maxY;
+
+  // Scratch for one corner's sample.
+  const sky4: number[] = [];
+  const block4: number[] = [];
 
   for (let y = 0; y < maxY; y++) {
     for (let lz = 0; lz < CZ; lz++) {
@@ -156,8 +147,10 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
-          const nb = blockAt(wx + face.n[0], y + face.n[1], wz + face.n[2]);
-          if (!shouldRenderFace(b, nb)) continue;
+          const nbx = wx + face.n[0];
+          const nby = y + face.n[1];
+          const nbz = wz + face.n[2];
+          if (!shouldRenderFace(b, blockAt(nbx, nby, nbz))) continue;
 
           const tile = tileOf(b, f);
           const col = tile % ATLAS_COLS;
@@ -168,16 +161,70 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           const v1 = (row + 1) / ATLAS_ROWS - INSET_V;
 
           const base = acc.count;
+          const aoLevel: number[] = [0, 0, 0, 0];
+
           for (let i = 0; i < 4; i++) {
-            const vert = face.v[i];
+            const cor = face.corners[i];
+            // Corner sign along the two in-plane axes (corner coords are 0/1).
+            const su = cor[0] * face.u[0] + cor[1] * face.u[1] + cor[2] * face.u[2] >= 1 ? 1 : -1;
+            const sv = cor[0] * face.v[0] + cor[1] * face.v[1] + cor[2] * face.v[2] >= 1 ? 1 : -1;
+
+            // Sampling cells on the OUTWARD side of the face.
+            const cX = nbx;
+            const cY = nby;
+            const cZ = nbz;
+            const s1x = cX + su * face.u[0], s1y = cY + su * face.u[1], s1z = cZ + su * face.u[2];
+            const s2x = cX + sv * face.v[0], s2y = cY + sv * face.v[1], s2z = cZ + sv * face.v[2];
+            const dgx = s1x + sv * face.v[0], dgy = s1y + sv * face.v[1], dgz = s1z + sv * face.v[2];
+
+            const o1 = opaqueAt(s1x, s1y, s1z) ? 1 : 0;
+            const o2 = opaqueAt(s2x, s2y, s2z) ? 1 : 0;
+            const oc = opaqueAt(dgx, dgy, dgz) ? 1 : 0;
+            const level = o1 && o2 ? 0 : 3 - (o1 + o2 + oc);
+            aoLevel[i] = level;
+
+            // Smooth light: average non-opaque cells touching this corner.
+            sky4.length = 0;
+            block4.length = 0;
+            sky4.push(skyAt(cX, cY, cZ)); // center (always non-opaque: face is visible)
+            block4.push(blockLightAt(cX, cY, cZ));
+            if (!o1) {
+              sky4.push(skyAt(s1x, s1y, s1z));
+              block4.push(blockLightAt(s1x, s1y, s1z));
+            }
+            if (!o2) {
+              sky4.push(skyAt(s2x, s2y, s2z));
+              block4.push(blockLightAt(s2x, s2y, s2z));
+            }
+            if (!(o1 && o2) && !oc) {
+              sky4.push(skyAt(dgx, dgy, dgz));
+              block4.push(blockLightAt(dgx, dgy, dgz));
+            }
+            let sSum = 0;
+            let bSum = 0;
+            for (let j = 0; j < sky4.length; j++) {
+              sSum += sky4[j];
+              bSum += block4[j];
+            }
+            const sky = sSum / sky4.length / 15;
+            const blk = bSum / block4.length / 15;
+            const ao = AO_CURVE[level];
+
+            const vert = face.corners[i];
             acc.positions.push(lx + vert[0], y + vert[1], lz + vert[2]);
             acc.normals.push(face.n[0], face.n[1], face.n[2]);
+            acc.light.push(sky, blk, ao);
             const cu = face.uv[i][0];
             const cv = face.uv[i][1];
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
-            acc.light.push(face.shade);
           }
-          acc.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+
+          // Flip the quad diagonal to avoid AO interpolation artifacts.
+          if (aoLevel[0] + aoLevel[2] < aoLevel[1] + aoLevel[3]) {
+            acc.indices.push(base + 1, base + 2, base + 3, base + 1, base + 3, base);
+          } else {
+            acc.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          }
           acc.count += 4;
         }
       }

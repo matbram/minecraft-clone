@@ -272,7 +272,7 @@ function frame(now: number): void {
       `fps ${fpsSmooth.toFixed(0)}\n` +
       `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}\n` +
-      `loaded ${chunkManager.loadedCount}  meshQ ${chunkManager.meshQueueLength}\n` +
+      `loaded ${chunkManager.loadedCount}  lightQ ${chunkManager.lightQueueLength}  meshQ ${chunkManager.meshQueueLength}\n` +
       `seed ${seed}  workers ${scheduler.poolSize}`;
   }
 

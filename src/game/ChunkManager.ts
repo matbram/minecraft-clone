@@ -11,6 +11,7 @@ import {
   UNLOAD_MARGIN,
   MAX_GEN_PER_FRAME,
   MAX_MESH_PER_FRAME,
+  MAX_LIGHT_PER_FRAME,
   worldToChunk,
 } from '../core/constants';
 import { Chunk } from '../core/Chunk';
@@ -31,6 +32,7 @@ export class ChunkManager {
   private readonly renderer: ChunkRenderer;
 
   private meshDirty = new Set<string>();
+  private lightDirty = new Set<string>(); // chunks whose light needs computing
   private pcx = Number.NaN;
   private pcz = Number.NaN;
 
@@ -49,6 +51,9 @@ export class ChunkManager {
   get meshQueueLength(): number {
     return this.meshDirty.size;
   }
+  get lightQueueLength(): number {
+    return this.lightDirty.size;
+  }
 
   update(_dt: number, playerPos: THREE.Vector3): void {
     const cx = worldToChunk(playerPos.x);
@@ -60,6 +65,7 @@ export class ChunkManager {
     }
 
     this.scheduler.pump(MAX_GEN_PER_FRAME);
+    this.processLightQueue(MAX_LIGHT_PER_FRAME); // light BEFORE meshing
     this.processMeshQueue(MAX_MESH_PER_FRAME);
   }
 
@@ -84,8 +90,11 @@ export class ChunkManager {
         if (d2 > GEN_RADIUS * GEN_RADIUS) continue;
         const cx = this.pcx + dx;
         const cz = this.pcz + dz;
-        if (!this.world.getChunk(cx, cz) && !this.scheduler.isRequested(cx, cz)) {
+        const existing = this.world.getChunk(cx, cz);
+        if (!existing && !this.scheduler.isRequested(cx, cz)) {
           this.scheduler.request(cx, cz, d2);
+        } else if (existing && !existing.lit) {
+          this.lightDirty.add(chunkKey(cx, cz)); // safety net: ensure it gets lit
         }
       }
     }
@@ -115,10 +124,10 @@ export class ChunkManager {
     this.world.placeFeatures(chunk, resp.features); // 3. this chunk's features (spill -> pending/neighbor)
 
     chunk.dirty = true;
-    if (this.withinRender(resp.cx, resp.cz)) {
-      this.meshDirty.add(chunkKey(resp.cx, resp.cz));
-    }
-    // Existing neighbors re-mesh their seams against the new chunk.
+    // Light every loaded chunk (gen-ring chunks must be lit so render-ring
+    // neighbors can mesh). initChunkLight marks the chunk dirty -> meshing.
+    this.lightDirty.add(chunkKey(resp.cx, resp.cz));
+    // Existing neighbors re-mesh their seams against the new chunk's blocks.
     this.world.markNeighbors(resp.cx, resp.cz);
   }
 
@@ -137,6 +146,38 @@ export class ChunkManager {
     );
   }
 
+  // Smooth lighting samples neighbor light at borders, so a chunk only meshes
+  // once it AND its 4 neighbors are lit.
+  private neighborsLit(cx: number, cz: number): boolean {
+    const a = this.world.getChunk(cx + 1, cz);
+    const b = this.world.getChunk(cx - 1, cz);
+    const c = this.world.getChunk(cx, cz + 1);
+    const d = this.world.getChunk(cx, cz - 1);
+    return !!a?.lit && !!b?.lit && !!c?.lit && !!d?.lit;
+  }
+
+  private processLightQueue(max: number): void {
+    let done = 0;
+    for (const key of [...this.lightDirty]) {
+      if (done >= max) break;
+      const [cx, cz] = parseKey(key);
+      const chunk = this.world.getChunk(cx, cz);
+      if (!chunk) {
+        this.lightDirty.delete(key);
+        continue;
+      }
+      if (chunk.lit) {
+        this.lightDirty.delete(key);
+        continue;
+      }
+      // No neighbor gate: initChunkLight seeds from whatever lit neighbors exist;
+      // light from later-loaded neighbors floods back in when they are lit.
+      this.world.lightChunk(chunk);
+      this.lightDirty.delete(key);
+      done++;
+    }
+  }
+
   private processMeshQueue(max: number): void {
     let built = 0;
     for (const key of [...this.meshDirty]) {
@@ -153,6 +194,9 @@ export class ChunkManager {
       }
       if (!this.neighborsReady(cx, cz)) {
         continue; // retry next frame once neighbors generate
+      }
+      if (!chunk.lit || !this.neighborsLit(cx, cz)) {
+        continue; // wait until this chunk + neighbors are lit (smooth lighting)
       }
       if (!chunk.dirty && this.renderer.has(cx, cz)) {
         this.meshDirty.delete(key);

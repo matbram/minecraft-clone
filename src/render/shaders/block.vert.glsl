@@ -1,11 +1,11 @@
 // Voxel vertex shader (ShaderMaterial: position/uv/normal + built-in matrices
-// are injected by three.js). `light` is our custom per-vertex attribute — flat
-// per-face shading in Phase 0, baked smooth lighting in Phase 3 (same layout).
+// are injected by three.js). `light` carries baked smooth lighting:
+//   x = sky light (0..1), y = block light (0..1), z = ambient occlusion (0..1).
 
-attribute float light;
+attribute vec3 light;
 
 varying vec2 vUv;
-varying float vLight;
+varying vec3 vLight;
 varying float vFogDepth;
 
 void main() {

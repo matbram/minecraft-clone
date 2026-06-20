@@ -28,7 +28,7 @@ export class ChunkRenderer {
     g.setAttribute('position', new THREE.BufferAttribute(a.positions, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(a.normals, 3));
     g.setAttribute('uv', new THREE.BufferAttribute(a.uvs, 2));
-    g.setAttribute('light', new THREE.BufferAttribute(a.light, 1));
+    g.setAttribute('light', new THREE.BufferAttribute(a.light, 3));
     g.setIndex(new THREE.BufferAttribute(a.indices, 1)); // Uint32 (chunks exceed 65k verts)
     g.computeBoundingSphere();
     return g;

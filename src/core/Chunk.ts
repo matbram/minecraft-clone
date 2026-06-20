@@ -19,6 +19,7 @@ export class Chunk {
   maxY: number; // chunk-wide topmost non-air y + 1 (mesh skip-empty bound)
 
   dirty = true; // needs (re)mesh
+  lit = false; // light computed by LightEngine (Phase 3); gates meshing
 
   constructor(
     cx: number,
@@ -33,13 +34,8 @@ export class Chunk {
     this.data = data ?? new Uint8Array(BLOCKS);
     this.heightMap = heightMap ?? new Uint8Array(COLS);
     this.maxY = maxY ?? 0;
-    if (light) {
-      this.light = light;
-    } else {
-      this.light = new Uint8Array(BLOCKS);
-      // Phase 0: flat sky light so the baked-light vertex pipeline is exercised.
-      this.light.fill(0xf0); // sky=15, block=0
-    }
+    // Light is all-zero (dark) until LightEngine.initChunkLight computes it.
+    this.light = light ?? new Uint8Array(BLOCKS);
   }
 
   getBlock(lx: number, y: number, lz: number): Block {
