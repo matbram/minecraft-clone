@@ -12,6 +12,7 @@ import {
   LAYER_TRANSPARENT,
   UNDERWATER_FOG_COLOR,
   UNDERWATER_FOG_DENSITY,
+  MAX_FLUID_OPS_PER_TICK,
   worldToChunk,
 } from './core/constants';
 import { Block } from './core/BlockTypes';
@@ -320,6 +321,7 @@ function frame(now: number): void {
       player.prevPos.copy(player.pos);
       player.tick(FIXED_DT);
       interaction.tick(FIXED_DT);
+      world.tickFluids(MAX_FLUID_OPS_PER_TICK);
       accumulator -= FIXED_DT;
       steps++;
     }

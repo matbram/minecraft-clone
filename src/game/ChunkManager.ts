@@ -135,6 +135,7 @@ export class ChunkManager {
 
     this.world.addChunk(chunk);
     this.world.applyEdits(chunk); // 1. player deltas win over generation
+    this.world.rehydrateFluids(chunk); // re-derive flow levels around replayed edits
     this.world.drainPending(chunk); // 2. features other chunks queued into this one
     this.world.placeFeatures(chunk, resp.features); // 3. this chunk's features (spill -> pending/neighbor)
 

@@ -10,6 +10,7 @@
 
 import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
+import { fluidSurfaceHeight } from '../core/fluid';
 import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
 import type { World } from '../world/World';
@@ -132,6 +133,15 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
     const chunk = chunkAt(wx, wz);
     return chunk ? chunk.getBlockLight(idx(mod(wx, CX), wy, mod(wz, CZ))) : 0;
   };
+  const fluidAt = (wx: number, wy: number, wz: number): number => {
+    if (wy < 0 || wy >= CY) return 0;
+    const chunk = chunkAt(wx, wz);
+    return chunk ? chunk.getFluid(mod(wx, CX), wy, mod(wz, CZ)) : 0;
+  };
+  // Top height (block fraction) of a water cell at world coords, accounting for a
+  // water cell directly above (full-height column).
+  const waterHeightAt = (wx: number, wy: number, wz: number): number =>
+    fluidSurfaceHeight(Block.WATER, fluidAt(wx, wy, wz), blockAt(wx, wy + 1, wz) === Block.WATER);
 
   const opaque = newAccum();
   const transparent = newAccum();
@@ -152,17 +162,51 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const acc = NEEDS_BLEND.has(b) ? transparent : opaque;
         const waveFlag = IS_FOLIAGE[b] ? 1 : 0;
 
+        // Phase 6: variable-height water. h = this cell's top (1.0 for non-water,
+        // sources, falling, and any water with water directly above).
+        const isWater = b === Block.WATER;
+        const selfFluid = isWater ? self.getFluid(lx, y, lz) : 0;
+        const h = isWater
+          ? fluidSurfaceHeight(b, selfFluid, blockAt(wx, y + 1, wz) === Block.WATER)
+          : 1;
+
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
           const nbx = wx + face.n[0];
           const nby = y + face.n[1];
           const nbz = wz + face.n[2];
-          if (!shouldRenderFace(b, blockAt(nbx, nby, nbz))) continue;
+          const nbr = blockAt(nbx, nby, nbz);
 
-          // Reflective only for the exposed water top-face at the sea-level
-          // surface (face 2 = +Y, y === SEA_LEVEL -> top at WATER_SURFACE_Y).
-          // Any other water (sides / future off-plane water) stays flat.
-          const reflFlag = b === Block.WATER && f === 2 && y === SEA_LEVEL ? 1 : 0;
+          // Decide visibility + vertical extent. Non-water keeps the original
+          // cull rule (topH=1, botH=0 -> geometry unchanged). Water uses its top
+          // height h and draws partial side lips against air / shorter water.
+          let topH = 1;
+          let botH = 0;
+          let draw: boolean;
+          if (!isWater) {
+            draw = shouldRenderFace(b, nbr);
+          } else if (f === 2 || f === 3) {
+            topH = h; // top face drops to h; bottom face's corners are all at 0
+            draw = shouldRenderFace(b, nbr);
+          } else {
+            // Side face: span from a floor up to h.
+            topH = h;
+            if (nbr === Block.AIR) {
+              draw = true;
+            } else if (nbr === Block.WATER) {
+              const nh = waterHeightAt(nbx, nby, nbz);
+              draw = nh < h - 1e-4; // only the exposed lip; equal/taller neighbor culls
+              botH = nh;
+            } else {
+              draw = shouldRenderFace(b, nbr); // glass -> draw full side; opaque -> cull
+            }
+          }
+          if (!draw) continue;
+
+          // Reflective only for an exposed water SOURCE top-face at the sea-level
+          // surface (face 2 = +Y, y === SEA_LEVEL -> top at WATER_SURFACE_Y). Only
+          // full sources (fluid===0) keep the reflection plane aligned.
+          const reflFlag = isWater && f === 2 && y === SEA_LEVEL && selfFluid === 0 ? 1 : 0;
 
           const tile = tileOf(b, f);
           const col = tile % ATLAS_COLS;
@@ -223,7 +267,10 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const ao = AO_CURVE[level];
 
             const vert = face.corners[i];
-            acc.positions.push(lx + vert[0], y + vert[1], lz + vert[2]);
+            // Water shortens faces: top corners (vert[1]===1) sit at topH, bottom
+            // corners at botH. Non-water uses topH=1/botH=0 -> unchanged.
+            const vy = vert[1] === 1 ? topH : botH;
+            acc.positions.push(lx + vert[0], y + vy, lz + vert[2]);
             acc.normals.push(face.n[0], face.n[1], face.n[2]);
             acc.light.push(sky, blk, ao);
             const cu = face.uv[i][0];

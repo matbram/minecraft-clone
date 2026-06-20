@@ -15,6 +15,9 @@ export class Chunk {
   // Packed light: high nibble = sky light (0..15), low nibble = block light (0..15).
   // Allocated now; flat-filled in Phase 0 (sky=15). Phase 3 replaces with a BFS.
   light: Uint8Array; // length BLOCKS
+  // Phase 6: flow level per cell, only meaningful where data[i] === WATER.
+  // 0 = source/full (the default, correct for worldgen lakes). See core/fluid.ts.
+  fluid: Uint8Array; // length BLOCKS
   heightMap: Uint8Array; // length COLS: 1 + topmost non-air y per column (0 if empty column)
   maxY: number; // chunk-wide topmost non-air y + 1 (mesh skip-empty bound)
 
@@ -28,6 +31,7 @@ export class Chunk {
     heightMap?: Uint8Array,
     maxY?: number,
     light?: Uint8Array,
+    fluid?: Uint8Array,
   ) {
     this.cx = cx;
     this.cz = cz;
@@ -36,6 +40,8 @@ export class Chunk {
     this.maxY = maxY ?? 0;
     // Light is all-zero (dark) until LightEngine.initChunkLight computes it.
     this.light = light ?? new Uint8Array(BLOCKS);
+    // Fluid is all-zero = all sources; correct for worldgen water at equilibrium.
+    this.fluid = fluid ?? new Uint8Array(BLOCKS);
   }
 
   getBlock(lx: number, y: number, lz: number): Block {
@@ -50,7 +56,19 @@ export class Chunk {
     const prev = this.data[i];
     if (prev === b) return;
     this.data[i] = b;
+    // Clear any stale flow level when this cell becomes non-water (e.g. a solid
+    // placed where flowing water was). Water writers set the level explicitly.
+    if (b !== Block.WATER) this.fluid[i] = 0;
     this.updateHeightOnChange(lx, y, lz, b);
+  }
+
+  getFluid(lx: number, y: number, lz: number): number {
+    if (y < 0 || y >= CY) return 0;
+    return this.fluid[idx(lx, y, lz)];
+  }
+  setFluid(lx: number, y: number, lz: number, f: number): void {
+    if (y < 0 || y >= CY) return;
+    this.fluid[idx(lx, y, lz)] = f;
   }
 
   // Fast path for generation: write without recomputing height each call.

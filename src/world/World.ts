@@ -10,6 +10,7 @@ import { Chunk } from '../core/Chunk';
 import { templateFor, type FeatureDecision } from '../core/features';
 import { chunkKey } from './chunkKey';
 import { LightEngine } from './LightEngine';
+import { FluidSim } from './FluidSim';
 
 interface PendingBlock {
   lx: number;
@@ -30,6 +31,7 @@ export class World {
   onDirty: (cx: number, cz: number) => void = () => {};
 
   private readonly lightEngine = new LightEngine(this);
+  private readonly fluidSim = new FluidSim(this);
 
   constructor(seed: number) {
     this.seed = seed;
@@ -61,6 +63,57 @@ export class World {
     return chunk.getBlock(mod(wx, CX), wy, mod(wz, CZ));
   }
 
+  getFluidWorld(wx: number, wy: number, wz: number): number {
+    if (wy < 0 || wy >= CY) return 0;
+    const chunk = this.getChunk(worldToChunk(wx), worldToChunk(wz));
+    if (!chunk) return 0;
+    return chunk.getFluid(mod(wx, CX), wy, mod(wz, CZ));
+  }
+
+  // --- flowing water (Phase 6) ---------------------------------------------
+
+  // Write a (block, fluid) pair from the simulation. Skips the light BFS (AIR and
+  // WATER are both transparent non-emitters, so air<->water never changes light)
+  // and only remeshes when the rendered cell actually changed (the equilibrium
+  // no-op guard that prevents an endless remesh storm). NOT persisted.
+  setFluidBlock(wx: number, wy: number, wz: number, block: Block, fluid: number): boolean {
+    if (wy < 0 || wy >= CY) return false;
+    const cx = worldToChunk(wx);
+    const cz = worldToChunk(wz);
+    const lx = mod(wx, CX);
+    const lz = mod(wz, CZ);
+    const chunk = this.getChunk(cx, cz);
+    if (!chunk) return false;
+    const newFluid = block === Block.WATER ? fluid : 0;
+    if (chunk.getBlock(lx, wy, lz) === block && chunk.getFluid(lx, wy, lz) === newFluid) return false;
+    chunk.setBlock(lx, wy, lz, block);
+    chunk.setFluid(lx, wy, lz, newFluid);
+    this.markDirtyAround(cx, cz, lx, lz);
+    return true;
+  }
+
+  tickFluids(maxOps: number): void {
+    this.fluidSim.tick(maxOps);
+  }
+
+  // After a chunk's persisted edits are replayed, re-derive its fluid state: water
+  // cells recompute their true level (flowing reloads as a source-level 0 until
+  // re-simulated) or drain, and dug-out AIR cells let neighboring water flow back
+  // in. Worldgen-only chunks (no edits) need nothing — they're at equilibrium.
+  rehydrateFluids(chunk: Chunk): void {
+    const m = this.edits.get(chunkKey(chunk.cx, chunk.cz));
+    if (!m) return;
+    const baseX = chunk.cx * CX;
+    const baseZ = chunk.cz * CZ;
+    for (const blockIndex of m.keys()) {
+      const y = Math.floor(blockIndex / COLS);
+      const rem = blockIndex % COLS;
+      const lz = Math.floor(rem / CX);
+      const lx = rem % CX;
+      this.fluidSim.enqueueAround(baseX + lx, y, baseZ + lz);
+    }
+  }
+
   // --- player edits (Phase 1 interaction goes through here) ----------------
 
   editBlock(wx: number, wy: number, wz: number, type: Block): void {
@@ -74,6 +127,7 @@ export class World {
 
     const oldB = chunk.getBlock(lx, wy, lz); // capture BEFORE the change for lighting
     chunk.setBlock(lx, wy, lz, type);
+    if (type === Block.WATER) chunk.setFluid(lx, wy, lz, 0); // player-placed water is a source
 
     const key = chunkKey(cx, cz);
     let m = this.edits.get(key);
@@ -85,6 +139,8 @@ export class World {
 
     this.queueLightUpdate(wx, wy, wz, oldB, type);
     this.markDirtyAround(cx, cz, lx, lz);
+    // Let water flow into / around the change (bounded; most cells resolve to no-ops).
+    this.fluidSim.enqueueAround(wx, wy, wz);
   }
 
   // Incremental light update on a block edit (remove + add for sky and block).

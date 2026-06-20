@@ -173,12 +173,14 @@ export function isSelectable(b: Block): boolean {
   return b !== Block.AIR && b !== Block.WATER;
 }
 
-// Blocks the player can hold + place. Excludes AIR, WATER, BEDROCK.
+// Blocks the player can hold + place. Excludes AIR, BEDROCK. Water places a
+// source block (Phase 6 flow sim takes it from there).
 export const PLACEABLE: Block[] = [
   Block.GRASS,
   Block.DIRT,
   Block.STONE,
   Block.SAND,
+  Block.WATER,
   Block.GLASS,
   Block.LOG,
   Block.LEAVES,

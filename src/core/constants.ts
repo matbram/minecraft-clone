@@ -148,3 +148,16 @@ export const WATER_DRAG = 0.8; // horizontal water friction (no input)
 
 export const UNDERWATER_FOG_DENSITY = 0.09; // murky, short view when submerged
 export const UNDERWATER_FOG_COLOR = 0x2a5e7a; // deep blue-teal
+
+// ---------------------------------------------------------------------------
+// Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel
+// `fluid` byte per cell (only meaningful where the block id is WATER):
+//   low 3 bits = level (0 = source/full, 1..7 = thinning), bit 0x08 = falling.
+// ---------------------------------------------------------------------------
+export const FLUID_TICK_DELAY = 5; // ticks before an enqueued cell updates (MC water)
+export const MAX_FLUID_OPS_PER_TICK = 256; // cells processed per 20 TPS tick (throttle)
+export const FLUID_MAX_LEVEL = 7; // 1..7 flowing; 0 = source
+export const FLUID_FALLING = 0x08; // falling-bit in the fluid byte
+export const FLUID_LEVEL_MASK = 0x07;
+// Level -> visual top height (fraction of a block). Sources/falling render full.
+export const FLUID_HEIGHTS = [1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125];
