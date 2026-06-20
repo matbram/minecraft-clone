@@ -1,8 +1,8 @@
 // DOM inventory overlay: a grid of all placeable blocks. Click one to assign it
 // to the active hotbar slot. Opening releases pointer lock (handled via onOpen).
 
-import { ATLAS_COLS, PLACEABLE, representativeTile, type Block } from '../core/BlockTypes';
-import { TILE_PX } from '../render/atlas';
+import { PLACEABLE, EDIBLE, type Block } from '../core/BlockTypes';
+import { drawIcon } from './itemIcon';
 import type { Hotbar } from './Hotbar';
 
 export class Inventory {
@@ -32,7 +32,7 @@ export class Inventory {
 
     const grid = document.createElement('div');
     grid.className = 'inv-grid';
-    for (const block of PLACEABLE) {
+    for (const block of [...PLACEABLE, ...EDIBLE]) {
       grid.appendChild(this.makeCell(block));
     }
     panel.appendChild(grid);
@@ -47,11 +47,7 @@ export class Inventory {
     cv.width = 48;
     cv.height = 48;
     const ctx = cv.getContext('2d')!;
-    ctx.imageSmoothingEnabled = false;
-    const tile = representativeTile(block);
-    const col = tile % ATLAS_COLS;
-    const row = Math.floor(tile / ATLAS_COLS);
-    ctx.drawImage(this.atlas, col * TILE_PX, row * TILE_PX, TILE_PX, TILE_PX, 0, 0, cv.width, cv.height);
+    drawIcon(ctx, block, this.atlas, cv.width);
     cell.appendChild(cv);
     cell.addEventListener('click', () => {
       this.hotbar.setSlot(this.hotbar.active, block);

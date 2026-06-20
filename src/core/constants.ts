@@ -130,6 +130,31 @@ export const RENDER_DISTANCE_MIN = 3;
 export const RENDER_DISTANCE_MAX = 16;
 
 // ---------------------------------------------------------------------------
+// Phase 11b: survival (health / hunger / air, fall damage, drowning, hunger,
+// death/respawn). Only active when the Survival setting is on (default Creative).
+// Tune by feel. Health/hunger are 0..20 (10 icons, half-icon granularity), air 0..10.
+// ---------------------------------------------------------------------------
+export const MAX_HEALTH = 20;
+export const MAX_HUNGER = 20;
+export const MAX_AIR = 10;
+
+export const SAFE_FALL_BLOCKS = 3; // free fall up to this many blocks; damage = blocks beyond
+export const AIR_SECONDS = 15; // seconds of breath underwater before air runs out
+export const DROWN_DPS = 2; // health lost per second once air hits 0
+export const AIR_REFILL_DPS = 5; // air regained per second above water
+
+export const HUNGER_DRAIN_BASE = 0.06; // hunger lost per second standing still
+export const HUNGER_DRAIN_MOVE = 0.18; // extra hunger/sec while moving (scaled by sprint)
+export const REGEN_HUNGER = 18; // health regenerates while hunger is at/above this
+export const REGEN_DPS = 1; // health regained per second when well-fed
+export const REGEN_HUNGER_COST = 0.4; // hunger spent per second of regen
+export const STARVE_DPS = 1; // health lost per second at 0 hunger
+export const STARVE_FLOOR = 1; // starvation never drops health below this (not lethal)
+
+export const FOOD_RESTORE_APPLE = 6; // hunger restored per apple eaten
+export const RESPAWN_FLASH_SECONDS = 1; // red death-flash duration before/while respawning
+
+// ---------------------------------------------------------------------------
 // Phase 4b: dynamic sun shadows + reflective water (Cinematic only).
 // ---------------------------------------------------------------------------
 // Render layers. Opaque chunks live on DEFAULT (+ SHADOW_CASTER so the sun-depth

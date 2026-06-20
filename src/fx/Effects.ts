@@ -66,6 +66,11 @@ export class Effects {
     this.sfx.playPlace(block);
   }
 
+  // Phase 11b: soft cue when a food item is eaten (reuses the pickup chime).
+  onEat(): void {
+    this.sfx.playPickup();
+  }
+
   update(dt: number, camera: THREE.PerspectiveCamera, lightMul: number): void {
     const p = this.player;
     this.lightMul = lightMul;

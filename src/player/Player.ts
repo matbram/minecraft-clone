@@ -57,6 +57,10 @@ export class Player {
   onGround = false;
   inWater = false; // body overlaps water this tick (drives swim physics + HUD)
   mode = PlayerMode.WALK;
+  // Downward speed (blocks/s) at the moment of landing on solid ground THIS tick,
+  // captured before vel.y is zeroed; 0 if no hard landing. Survival reads it for
+  // fall damage. Landing in water never sets this (water cancels the fall).
+  landingImpact = 0;
 
   private readonly world: World;
   private readonly input: Input;
@@ -111,6 +115,7 @@ export class Player {
 
   tick(dt: number): void {
     if (!this.input.locked) return; // no input while unlocked / inventory open
+    this.landingImpact = 0; // reset each tick; moveY sets it on a hard landing
 
     if (this.mode === PlayerMode.FLY) {
       this.tickFly(dt);
@@ -227,6 +232,7 @@ export class Player {
         if (d < 0) {
           this.pos.y = Math.floor(b.minY) + 1 + EPS; // landed on top of block
           this.onGround = true;
+          this.landingImpact = -this.vel.y; // fall speed at impact (for fall damage)
         } else {
           this.pos.y = Math.floor(b.maxY) - HEIGHT - EPS; // bonked head
         }

@@ -167,7 +167,7 @@ export class PauseMenu {
     controls.className = 'menu-controls';
     controls.innerHTML =
       'WASD move · Space jump / swim up · Ctrl sprint · Shift sneak / dive<br />' +
-      'LMB break · RMB place · 1–9 select · Wheel cycle · E inventory · F fly<br />' +
+      'LMB break · RMB place / eat · 1–9 select · Wheel cycle · E inventory · F fly<br />' +
       'T textures · G quality · M mute · N fast-forward time · P pause time · Esc menu';
     panel.appendChild(controls);
 

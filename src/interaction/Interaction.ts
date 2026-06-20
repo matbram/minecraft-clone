@@ -2,7 +2,7 @@
 // tick() runs per fixed step (mining progress); tryPlace() fires on right-click.
 
 import type * as THREE from 'three';
-import { Block, HARDNESS, IS_SOLID } from '../core/BlockTypes';
+import { Block, HARDNESS, IS_SOLID, IS_EDIBLE } from '../core/BlockTypes';
 import { REACH, INSTANT_BREAK, BREAK_STAGES } from '../core/constants';
 import type { World } from '../world/World';
 import type { Input } from '../player/Input';
@@ -23,6 +23,9 @@ export class Interaction {
   // mechanics work standalone and Phase 2 stays fully skippable).
   onBreak: (block: Block, x: number, y: number, z: number) => void = () => {};
   onPlace: (block: Block, x: number, y: number, z: number) => void = () => {};
+  // Fired when a held edible is right-clicked; returns whether it was consumed
+  // (so a cue can play). Default no-op keeps eating fully optional.
+  onEat: (food: Block) => boolean = () => false;
   private breakProgress = 0;
   private paused = false;
 
@@ -73,6 +76,18 @@ export class Interaction {
       const stage = Math.min(BREAK_STAGES - 1, Math.floor((this.breakProgress / breakTime) * BREAK_STAGES));
       this.breakOverlay.setStage(this.target.cell, stage);
     }
+  }
+
+  // Right-click dispatch: a held edible is eaten (no aim target needed), anything
+  // else falls through to placing a block.
+  tryUse(): void {
+    if (this.paused) return;
+    const held = this.hotbar.selected();
+    if (IS_EDIBLE[held]) {
+      this.onEat(held);
+      return;
+    }
+    this.tryPlace();
   }
 
   // On right-click: place the selected block in the adjacent empty cell.

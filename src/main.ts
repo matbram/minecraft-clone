@@ -19,6 +19,8 @@ import {
   UNDERWATER_PARTICLES,
   WATER_SURFACE_Y,
   MAX_FLUID_OPS_PER_TICK,
+  EYE_HEIGHT,
+  RESPAWN_FLASH_SECONDS,
   worldToChunk,
 } from './core/constants';
 import { Block } from './core/BlockTypes';
@@ -54,6 +56,8 @@ import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { UnderwaterParticles } from './render/UnderwaterParticles';
 import { Settings } from './ui/Settings';
 import { PauseMenu } from './ui/PauseMenu';
+import { Survival } from './player/Survival';
+import { SurvivalHud } from './ui/SurvivalHud';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -176,7 +180,8 @@ const input = new Input(renderer.domElement);
 const spawnX = 8.5;
 const spawnZ = 8.5;
 const spawnY = surfaceHeight(Math.floor(spawnX), Math.floor(spawnZ), seed) + 2;
-const player = new Player(world, input, new THREE.Vector3(spawnX, spawnY, spawnZ));
+const spawnPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
+const player = new Player(world, input, spawnPos);
 input.pitch = -0.2;
 
 const outline = new BlockOutline(scene);
@@ -193,6 +198,26 @@ interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
 const prefs = new Settings();
 let muted = prefs.data.muted;
+
+// --- survival (Phase 11b) --------------------------------------------------
+const survival = new Survival();
+const survivalHud = new SurvivalHud(document.getElementById('survival-hud')!);
+const deathOverlay = document.getElementById('death-overlay')!;
+let deathFlash = 0; // seconds remaining of the red respawn flash
+interaction.onEat = (food) => {
+  if (!prefs.data.survival) return false; // eating only matters in survival mode
+  const ate = survival.eat(food);
+  if (ate) effects.onEat();
+  return ate;
+};
+function respawn(): void {
+  player.pos.copy(spawnPos);
+  player.prevPos.copy(spawnPos);
+  player.vel.set(0, 0, 0);
+  survival.reset();
+  deathFlash = RESPAWN_FLASH_SECONDS;
+  deathOverlay.classList.add('active');
+}
 
 // --- cinematic (Phase 4a) --------------------------------------------------
 let settings: QualitySettings = PRESETS[Preset.MEDIUM];
@@ -236,6 +261,7 @@ chunkManager.setRenderDistance(prefs.data.renderDistance);
 input.setSensitivity(prefs.data.sensitivity);
 materials.shared.uAtlas.value = textures.selectById(prefs.data.textureSourceId).getAtlas();
 effects.setMuted(prefs.data.muted);
+survivalHud.setVisible(prefs.data.survival);
 
 // --- UI glue ---------------------------------------------------------------
 // Settings mutators (shared by the menu controls AND the G/T/M hotkeys) — each
@@ -279,7 +305,8 @@ function setMuted(m: boolean): void {
 function setSurvival(s: boolean): void {
   prefs.data.survival = s;
   prefs.save();
-  // Survival mechanics + HUD arrive in Phase 11b; this only persists the choice.
+  survival.reset(); // start the chosen mode with full bars
+  survivalHud.setVisible(s); // Creative hides the HUD entirely
 }
 
 const menu = new PauseMenu(document.getElementById('menu')!, prefs, textures.ids, {
@@ -318,7 +345,7 @@ inventory.onClose = () => {
 
 input.onWheel = (dir) => hotbar.cycle(dir);
 input.onMouseDown = (button) => {
-  if (button === 2) interaction.tryPlace();
+  if (button === 2) interaction.tryUse(); // eat a held food, else place a block
 };
 input.onKeyPress = (code) => {
   if (code === 'Escape') {
@@ -406,6 +433,18 @@ function frame(now: number): void {
       player.tick(FIXED_DT);
       interaction.tick(FIXED_DT);
       world.tickFluids(MAX_FLUID_OPS_PER_TICK);
+      // Survival (Phase 11b): only when enabled + locked (paused/menu never drains).
+      // Reads landingImpact set by player.tick this same step.
+      if (prefs.data.survival && input.locked) {
+        const headUnderwater =
+          world.getBlockWorld(
+            Math.floor(player.pos.x),
+            Math.floor(player.pos.y + EYE_HEIGHT),
+            Math.floor(player.pos.z),
+          ) === Block.WATER;
+        survival.tick(FIXED_DT, player, headUnderwater);
+        if (survival.dead) respawn();
+      }
       accumulator -= FIXED_DT;
       steps++;
     }
@@ -441,6 +480,15 @@ function frame(now: number): void {
   const lightFade = submerged
     ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_LIGHT_DEPTH, 0), 1)
     : 0;
+
+  // Survival HUD (Phase 11b): cheap when unchanged (icons redraw only on change);
+  // the air row shows while the eye is submerged. Hidden entirely in Creative.
+  survivalHud.update(survival.health, survival.hunger, survival.air, submerged);
+  if (deathFlash > 0) {
+    deathFlash -= frameDt;
+    if (deathFlash <= 0) deathOverlay.classList.remove('active');
+  }
+
   sunMoon.setVisible(settings.sun);
   clouds.setVisible(settings.clouds);
   stars.setVisible(settings.stars);

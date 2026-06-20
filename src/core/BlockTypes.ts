@@ -21,6 +21,9 @@ export enum Block {
   COAL_ORE,
   IRON_ORE,
   GOLD_ORE,
+  // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
+  // generated, or saved. It exists only so survival has an edible to refill hunger.
+  APPLE,
   COUNT,
 }
 
@@ -103,7 +106,25 @@ export const IS_FOLIAGE = new Uint8Array(BLOCK_COUNT);
 
   // Leaves wave (also covers the grass decoration, placed as LEAVES).
   IS_FOLIAGE[Block.LEAVES] = 1;
+
+  // Apple is a held item, never a world block: not solid (never collided/meshed).
+  IS_SOLID[Block.APPLE] = 0;
+  IS_TRANSPARENT[Block.APPLE] = 1;
 })();
+
+// ---------------------------------------------------------------------------
+// Phase 11b: edible items. IS_EDIBLE drives "right-click eats instead of places";
+// FOOD_RESTORE is hunger points (0..20 scale) restored per item eaten.
+// ---------------------------------------------------------------------------
+export const IS_EDIBLE = new Uint8Array(BLOCK_COUNT);
+export const FOOD_RESTORE = new Float32Array(BLOCK_COUNT);
+(function initFood() {
+  IS_EDIBLE[Block.APPLE] = 1;
+  FOOD_RESTORE[Block.APPLE] = 6;
+})();
+
+// Items the player can hold + eat. Listed in the inventory alongside PLACEABLE.
+export const EDIBLE: Block[] = [Block.APPLE];
 
 // ---------------------------------------------------------------------------
 // Per-face tile mapping: TILE_INDEX[block*6 + face] -> atlas tile slot.

@@ -1,7 +1,7 @@
-// DOM hotbar: 9 slots, number keys / wheel select, icons cropped from the atlas.
+// DOM hotbar: 9 slots, number keys / wheel select, icons via the shared painter.
 
-import { Block, ATLAS_COLS, representativeTile } from '../core/BlockTypes';
-import { TILE_PX } from '../render/atlas';
+import { Block } from '../core/BlockTypes';
+import { drawIcon } from './itemIcon';
 
 const DEFAULT_SLOTS: Block[] = [
   Block.GRASS,
@@ -12,7 +12,7 @@ const DEFAULT_SLOTS: Block[] = [
   Block.LEAVES,
   Block.GLASS,
   Block.GLOWSTONE,
-  Block.GRAVEL,
+  Block.APPLE, // slot 9: an edible so survival's eat loop is reachable out of the box
 ];
 
 export class Hotbar {
@@ -72,12 +72,7 @@ export class Hotbar {
       slot.classList.toggle('active', i === this.active);
       const cv = slot.querySelector('canvas') as HTMLCanvasElement;
       const ctx = cv.getContext('2d')!;
-      ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      const tile = representativeTile(this.slots[i]);
-      const col = tile % ATLAS_COLS;
-      const row = Math.floor(tile / ATLAS_COLS);
-      ctx.drawImage(this.atlas, col * TILE_PX, row * TILE_PX, TILE_PX, TILE_PX, 0, 0, cv.width, cv.height);
+      drawIcon(ctx, this.slots[i], this.atlas, cv.width);
     }
   }
 }

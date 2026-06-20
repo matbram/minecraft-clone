@@ -106,6 +106,24 @@
       .inv-cell:hover { border-color: #fff; background: rgba(255,255,255,0.16); }
       .inv-cell canvas { image-rendering: pixelated; width: 48px; height: 48px; }
 
+      /* Survival HUD (Phase 11b) — hearts/hunger above the hotbar, air when diving */
+      #survival-hud {
+        position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%);
+        display: none; flex-direction: column; align-items: center; gap: 3px;
+        pointer-events: none; user-select: none; z-index: 30;
+      }
+      .sv-row { display: flex; gap: 1px; }
+      .sv-stats { display: flex; gap: 44px; }
+      .sv-row canvas { width: 18px; height: 18px; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.7)); }
+
+      /* Death flash (Phase 11b) */
+      #death-overlay {
+        position: fixed; inset: 0; pointer-events: none; user-select: none; z-index: 70;
+        opacity: 0; transition: opacity 0.18s ease;
+        background: radial-gradient(ellipse at center, rgba(130,0,0,0.25), rgba(80,0,0,0.8));
+      }
+      #death-overlay.active { opacity: 1; }
+
       /* Underwater tint (Phase 5) — fades in while the eye is submerged */
       #underwater-tint {
         position: fixed; inset: 0; pointer-events: none; user-select: none;
@@ -121,8 +139,10 @@
     <div id="crosshair"></div>
     <div id="hud"></div>
     <div id="hotbar"></div>
+    <div id="survival-hud"></div>
     <div id="inventory"></div>
     <div id="menu"></div>
+    <div id="death-overlay"></div>
     <div id="underwater-tint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
