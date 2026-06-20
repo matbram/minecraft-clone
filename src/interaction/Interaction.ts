@@ -2,7 +2,7 @@
 // tick() runs per fixed step (mining progress); tryPlace() fires on right-click.
 
 import type * as THREE from 'three';
-import { Block, HARDNESS } from '../core/BlockTypes';
+import { Block, HARDNESS, IS_SOLID } from '../core/BlockTypes';
 import { REACH, INSTANT_BREAK, BREAK_STAGES } from '../core/constants';
 import type { World } from '../world/World';
 import type { Input } from '../player/Input';
@@ -79,7 +79,9 @@ export class Interaction {
   tryPlace(): void {
     if (this.paused || !this.target) return;
     const p = this.target.place;
-    if (this.world.getBlockWorld(p.x, p.y, p.z) !== Block.AIR) return;
+    // Place into any non-solid cell (AIR or WATER) so you can build underwater;
+    // a block replaces the water and the fluid sim reflows around it.
+    if (IS_SOLID[this.world.getBlockWorld(p.x, p.y, p.z)]) return;
     if (this.intersectsPlayer(p.x, p.y, p.z)) return; // don't place inside yourself
     const type = this.hotbar.selected();
     this.world.editBlock(p.x, p.y, p.z, type);

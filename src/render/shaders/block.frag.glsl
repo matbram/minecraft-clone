@@ -13,6 +13,7 @@ uniform float uTime;
 uniform float uMoonFactor;   // directional moon sky-light at night (0 by day)
 uniform float uNightAmbient; // faint unshadowed night skyglow floor
 uniform vec3 uShadowDir;     // active shadow light (sun by day / moon by night)
+uniform vec3 uSkyLightColor; // tints the sky-light term: warm low sun / cool night
 
 // Phase 7b — underwater.
 uniform float uUnderwater;      // 1 when the camera eye is submerged
@@ -99,25 +100,23 @@ void main() {
   // Sun by day, moon by night — shadow dims whichever directional light is up;
   // the night skyglow floor (uNightAmbient) stays unshadowed so shadows aren't black.
   float dir = max(uDayFactor, uMoonFactor) * shadow;
-  float sky = vLight.x * max(dir, uNightAmbient);
-  float brightness = max(vLight.y, sky);
-  brightness = max(brightness, uAmbient);                          // cave floor
-  brightness *= vLight.z;                                          // ambient occlusion
+  float skyTerm = vLight.x * max(dir, uNightAmbient);
+  // Colored directional sky light (warm at low sun, white midday, cool at night);
+  // block/torch light (vLight.y) stays neutral. This is the golden-hour look.
+  vec3 lit = max(vec3(vLight.y), skyTerm * uSkyLightColor);
+  lit = max(lit, vec3(uAmbient));                                  // cave floor
+  lit *= vLight.z;                                                 // ambient occlusion
 
   // Underwater caustics: rippling light on up-facing, sky-lit surfaces (fades
   // out with depth as less light reaches the bottom).
   if (uUnderwater > 0.5) {
     float up = max(normalize(vWorldNormal).y, 0.0);
     float c = caustics(vWorldPos.xz, uTime);
-    brightness += c * up * vLight.x * 0.35 * (1.0 - uUnderwaterDepth);
+    lit += vec3(c * up * vLight.x * 0.35 * (1.0 - uUnderwaterDepth));
   }
 
-  vec3 color = tex.rgb * brightness;
+  vec3 color = tex.rgb * lit;
   float outA = tex.a;
-
-  // Cool moonlight cast at night (subtle; fades out by day).
-  float moonMix = clamp(uMoonFactor * 4.0, 0.0, 1.0) * (1.0 - uDayFactor) * 0.5;
-  color *= mix(vec3(1.0), vec3(0.702, 0.8, 1.0), moonMix);
 
   // Planar reflective water (top faces only; vReflect baked at mesh time).
   if (vReflect > 0.5 && uReflectStrength > 0.0) {

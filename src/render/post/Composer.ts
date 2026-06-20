@@ -14,7 +14,13 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { createGodRaysPass } from './GodRaysPass';
 import { createUnderwaterPass } from './UnderwaterPass';
-import { BLOOM_THRESHOLD, BLOOM_STRENGTH, BLOOM_RADIUS, TONE_EXPOSURE } from '../../core/constants';
+import {
+  BLOOM_THRESHOLD,
+  BLOOM_STRENGTH,
+  BLOOM_RADIUS,
+  TONE_EXPOSURE,
+  GODRAYS_EXPOSURE,
+} from '../../core/constants';
 import type { QualitySettings } from '../Quality';
 
 const ACES_PASS = {
@@ -81,9 +87,10 @@ export class Composer {
     this.godrays.enabled = s.godRays;
   }
 
-  updateGodRays(sunUv: THREE.Vector3, visible: boolean): void {
+  updateGodRays(sunUv: THREE.Vector3, visible: boolean, intensity = 1): void {
     (this.godrays.uniforms.uSunUv.value as THREE.Vector2).set(sunUv.x, sunUv.y);
     this.godrays.uniforms.uVisible.value = visible ? 1 : 0;
+    this.godrays.uniforms.uExposure.value = GODRAYS_EXPOSURE * intensity;
   }
 
   // Per-frame underwater distortion strength (0 = off/passthrough).

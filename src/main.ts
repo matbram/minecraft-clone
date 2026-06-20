@@ -360,6 +360,7 @@ function frame(now: number): void {
   materials.shared.uFogColor.value.copy(dayNight.fogColor);
   materials.shared.uFogDensity.value = dayNight.fogDensity;
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
+  materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
 
   // Underwater (Phase 5/7b): when the eye is in a water block, override the shared
   // fog (DayNight rewrote it just above, so this auto-clears on surfacing), ramp
@@ -396,7 +397,7 @@ function frame(now: number): void {
   if (settings.usePost) {
     if (settings.godRays) {
       const vis = sunMoon.sunScreenPos(camera, tmpSunUv) && dayNight.sunAboveHorizon;
-      composer.updateGodRays(tmpSunUv, vis);
+      composer.updateGodRays(tmpSunUv, vis, 1 + dayNight.sunGlow * 2); // stronger shafts at low sun
     }
     composer.render();
   } else {

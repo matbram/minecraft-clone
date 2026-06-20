@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import type { DayNight } from './DayNight';
 
 const DIST = 480; // inside the sky dome radius (600)
+const SUN_WHITE = new THREE.Color(1, 1, 1);
+const SUN_LOW = new THREE.Color(1.0, 0.42, 0.2); // deep orange-red at the horizon
 
 function discTexture(stops: Array<[number, string]>, size = 128): THREE.Texture {
   const c = document.createElement('canvas');
@@ -29,6 +31,7 @@ export class SunMoon {
   private readonly worldPos = new THREE.Vector3();
   private readonly fwd = new THREE.Vector3();
   private readonly toSun = new THREE.Vector3();
+  private readonly tmpCol = new THREE.Color();
   private enabled = true;
 
   constructor(scene: THREE.Scene) {
@@ -90,6 +93,15 @@ export class SunMoon {
     this.glow.material.opacity = sunUp;
     this.moon.material.opacity = moonUp * 0.9;
     this.moonGlow.material.opacity = moonUp * 0.5;
+
+    // Dramatic low sun: redden + enlarge the disc/glow as it nears the horizon.
+    const lowSun = THREE.MathUtils.clamp(1 - day.sunDir.y / 0.25, 0, 1);
+    this.tmpCol.copy(SUN_WHITE).lerp(SUN_LOW, lowSun);
+    this.sun.material.color.copy(this.tmpCol);
+    this.glow.material.color.copy(this.tmpCol);
+    this.sun.scale.setScalar(50 * (1 + 0.5 * lowSun));
+    this.glow.scale.setScalar(160 * (1 + 0.5 * lowSun));
+
     this.sun.visible = this.enabled && sunUp > 0.01;
     this.glow.visible = this.enabled && sunUp > 0.01;
     this.moon.visible = this.enabled && moonUp > 0.01;
@@ -99,12 +111,21 @@ export class SunMoon {
   // Project the sun to screen UV (0..1). Returns false if behind the camera.
   // Ensures camera matrices are current (this runs before the composer render).
   sunScreenPos(camera: THREE.PerspectiveCamera, out: THREE.Vector3): boolean {
+    return this.screenPos(this.sun.position, camera, out);
+  }
+
+  // Same for the moon (underwater night light shafts).
+  moonScreenPos(camera: THREE.PerspectiveCamera, out: THREE.Vector3): boolean {
+    return this.screenPos(this.moon.position, camera, out);
+  }
+
+  private screenPos(target: THREE.Vector3, camera: THREE.PerspectiveCamera, out: THREE.Vector3): boolean {
     camera.updateMatrixWorld();
     camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
     camera.getWorldDirection(this.fwd);
-    this.toSun.copy(this.sun.position).sub(camera.position);
+    this.toSun.copy(target).sub(camera.position);
     if (this.toSun.dot(this.fwd) <= 0) return false; // behind camera
-    this.worldPos.copy(this.sun.position).project(camera); // -> NDC
+    this.worldPos.copy(target).project(camera); // -> NDC
     out.set((this.worldPos.x + 1) / 2, (this.worldPos.y + 1) / 2, 0);
     return true;
   }

@@ -25,6 +25,8 @@ export interface Materials {
     uDayFactor: { value: number };
     uAmbient: { value: number };
     uSunDir: { value: THREE.Vector3 };
+    // Phase 8a — colored directional sky light (warm low sun / white noon / cool night).
+    uSkyLightColor: { value: THREE.Color };
     // Phase 7a — moonlight: directional moon sky-light, night skyglow floor, and
     // the active shadow-casting light dir (sun by day / moon by night).
     uMoonFactor: { value: number };
@@ -58,6 +60,7 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uDayFactor: { value: DAY_FACTOR_DEFAULT },
     uAmbient: { value: LIGHT_AMBIENT },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uSkyLightColor: { value: new THREE.Color(1, 1, 1) },
     uMoonFactor: { value: 0 },
     uNightAmbient: { value: 0 },
     uShadowDir: { value: new THREE.Vector3(0, 1, 0) },
