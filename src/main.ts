@@ -7,6 +7,8 @@ import {
   FIXED_DT,
   MAX_FRAME_DT,
   MAX_SUBSTEPS,
+  DAY_FF_MULT,
+  WIND_STRENGTH,
   worldToChunk,
 } from './core/constants';
 import { surfaceHeight } from './core/WorldGen';
@@ -25,6 +27,16 @@ import { Hotbar } from './ui/Hotbar';
 import { Inventory } from './ui/Inventory';
 import { Interaction } from './interaction/Interaction';
 import { Effects } from './fx/Effects';
+import { DayNight } from './render/DayNight';
+import { Sky } from './render/Sky';
+import { SunMoon } from './render/SunMoon';
+import { Clouds } from './render/Clouds';
+import { Stars } from './render/Stars';
+import { Composer } from './render/post/Composer';
+import { Preset, PRESETS, nextPreset, type QualitySettings } from './render/Quality';
+import { TextureRegistry } from './render/textures/TextureSource';
+import { ProceduralTextureSource } from './render/textures/ProceduralTextureSource';
+import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -119,13 +131,17 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
 });
 
 const scene = new THREE.Scene();
-scene.background = skyColor;
+// Sky dome (Phase 4a) replaces the flat background; clear color is a fallback.
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
 
 // --- assets + systems ------------------------------------------------------
 const atlas = buildAtlas();
 const materials = createMaterials(atlas.texture, skyColor);
+const textures = new TextureRegistry([
+  new ProceduralTextureSource(atlas),
+  new ProceduralPackTextureSource(),
+]);
 
 const world = new World(seed);
 world.load();
@@ -156,6 +172,28 @@ interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
 let muted = false;
+
+// --- cinematic (Phase 4a) --------------------------------------------------
+let settings: QualitySettings = PRESETS[Preset.MEDIUM];
+const dayNight = new DayNight();
+const sky = new Sky(scene);
+const sunMoon = new SunMoon(scene);
+const clouds = new Clouds(scene);
+const stars = new Stars(scene);
+const composer = new Composer(renderer, scene, camera, settings);
+const tmpSunUv = new THREE.Vector3();
+
+function applyPreset(p: Preset): void {
+  settings = PRESETS[p];
+  composer.setPreset(settings);
+  chunkManager.setRenderDistance(settings.renderDistance);
+  materials.shared.uWind.value = settings.wavingFoliage ? WIND_STRENGTH : 0;
+  sky.setVisible(settings.sky);
+  sunMoon.setVisible(settings.sun);
+  clouds.setVisible(settings.clouds);
+  stars.setVisible(settings.stars);
+}
+applyPreset(Preset.MEDIUM);
 
 // --- UI glue ---------------------------------------------------------------
 const lockHint = document.getElementById('lock-hint')!;
@@ -196,6 +234,18 @@ input.onKeyPress = (code) => {
     effects.setMuted(muted);
     return;
   }
+  if (code === 'KeyT') {
+    materials.shared.uAtlas.value = textures.cycle().getAtlas(); // instant, no re-mesh
+    return;
+  }
+  if (code === 'KeyG') {
+    applyPreset(nextPreset(settings.preset));
+    return;
+  }
+  if (code === 'KeyP') {
+    dayNight.paused = !dayNight.paused;
+    return;
+  }
   if (code.startsWith('Digit')) {
     const n = Number(code.slice(5));
     if (n >= 1 && n <= 9) hotbar.select(n - 1);
@@ -206,9 +256,12 @@ const hud = document.getElementById('hud')!;
 
 // --- resize ----------------------------------------------------------------
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h);
+  composer.setSize(w, h, Math.min(window.devicePixelRatio, 2));
 });
 
 // --- persistence -----------------------------------------------------------
@@ -251,16 +304,39 @@ function frame(now: number): void {
     if (steps === MAX_SUBSTEPS) accumulator = 0; // drop backlog after a stall
   }
 
+  // Advance the day/night cycle (hold N to fast-forward).
+  const tScale = input.isDown('KeyN') ? DAY_FF_MULT : 1;
+  dayNight.update(frameDt * tScale);
+
   // Per-frame (responsive): camera, aim, streaming, render.
   const alpha = physicsStarted ? accumulator / FIXED_DT : 0;
   player.applyToCamera(camera, alpha);
   camera.getWorldDirection(tmpDir);
   interaction.updateAim(camera.position, tmpDir); // aim BEFORE view-bob so the crosshair is steady
-  effects.update(frameDt, camera);
-  chunkManager.update(frameDt, player.pos);
+  effects.update(frameDt, camera); // sets sprint FOV + applies view-bob to camera
+
+  sky.update(camera.position, dayNight);
+  sunMoon.update(camera.position, dayNight);
+  clouds.update(camera.position, dayNight, frameDt);
+  stars.update(camera.position, dayNight);
 
   materials.shared.uTime.value = now / 1000;
-  renderer.render(scene, camera);
+  materials.shared.uDayFactor.value = dayNight.dayFactor;
+  materials.shared.uFogColor.value.copy(dayNight.fogColor);
+  materials.shared.uFogDensity.value = dayNight.fogDensity;
+  materials.shared.uSunDir.value.copy(dayNight.sunDir);
+
+  chunkManager.update(frameDt, player.pos);
+
+  if (settings.usePost) {
+    if (settings.godRays) {
+      const vis = sunMoon.sunScreenPos(camera, tmpSunUv) && dayNight.sunAboveHorizon;
+      composer.updateGodRays(tmpSunUv, vis);
+    }
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
 
   // HUD (throttled to ~5 Hz).
   if (frameDt > 0) fpsSmooth = fpsSmooth * 0.9 + (1 / frameDt) * 0.1;
@@ -273,7 +349,7 @@ function frame(now: number): void {
       `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}\n` +
       `loaded ${chunkManager.loadedCount}  lightQ ${chunkManager.lightQueueLength}  meshQ ${chunkManager.meshQueueLength}\n` +
-      `seed ${seed}  workers ${scheduler.poolSize}`;
+      `seed ${seed}  ${settings.name}  ${textures.active.id}  day ${dayNight.phase.toFixed(2)}${dayNight.paused ? ' (paused)' : ''}`;
   }
 
   requestAnimationFrame(frame);

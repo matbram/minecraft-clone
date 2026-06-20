@@ -22,14 +22,20 @@ import type { GenResponse } from '../gen/workerProtocol';
 import { ChunkRenderer } from '../render/ChunkRenderer';
 import { buildChunkMesh } from '../render/ChunkMesh';
 
-const RENDER_RADIUS = RENDER_DISTANCE;
-const GEN_RADIUS = RENDER_DISTANCE + 1;
-const UNLOAD_RADIUS = GEN_RADIUS + UNLOAD_MARGIN;
-
 export class ChunkManager {
   private readonly world: World;
   private readonly scheduler: GenScheduler;
   private readonly renderer: ChunkRenderer;
+
+  // Render distance is runtime-adjustable (quality presets). Generation ring is
+  // one chunk wider so every rendered chunk has neighbors for seams + lighting.
+  private renderRadius = RENDER_DISTANCE;
+  private get genRadius(): number {
+    return this.renderRadius + 1;
+  }
+  private get unloadRadius(): number {
+    return this.genRadius + UNLOAD_MARGIN;
+  }
 
   private meshDirty = new Set<string>();
   private lightDirty = new Set<string>(); // chunks whose light needs computing
@@ -55,6 +61,15 @@ export class ChunkManager {
     return this.lightDirty.size;
   }
 
+  // Quality presets call this; forcing pcx/pcz to NaN re-runs refreshRings,
+  // which loads/unloads chunks to match the new ring radius.
+  setRenderDistance(r: number): void {
+    if (r === this.renderRadius) return;
+    this.renderRadius = r;
+    this.pcx = Number.NaN;
+    this.pcz = Number.NaN;
+  }
+
   update(_dt: number, playerPos: THREE.Vector3): void {
     const cx = worldToChunk(playerPos.x);
     const cz = worldToChunk(playerPos.z);
@@ -75,7 +90,7 @@ export class ChunkManager {
       const [cx, cz] = parseKey(key);
       const dx = cx - this.pcx;
       const dz = cz - this.pcz;
-      if (dx * dx + dz * dz > UNLOAD_RADIUS * UNLOAD_RADIUS) {
+      if (dx * dx + dz * dz > this.unloadRadius * this.unloadRadius) {
         this.scheduler.cancel(cx, cz);
         this.renderer.removeChunk(cx, cz);
         this.world.removeChunk(cx, cz);
@@ -84,10 +99,10 @@ export class ChunkManager {
     }
 
     // Request missing chunks inside the generation ring (nearest first).
-    for (let dz = -GEN_RADIUS; dz <= GEN_RADIUS; dz++) {
-      for (let dx = -GEN_RADIUS; dx <= GEN_RADIUS; dx++) {
+    for (let dz = -this.genRadius; dz <= this.genRadius; dz++) {
+      for (let dx = -this.genRadius; dx <= this.genRadius; dx++) {
         const d2 = dx * dx + dz * dz;
-        if (d2 > GEN_RADIUS * GEN_RADIUS) continue;
+        if (d2 > this.genRadius * this.genRadius) continue;
         const cx = this.pcx + dx;
         const cz = this.pcz + dz;
         const existing = this.world.getChunk(cx, cz);
@@ -100,9 +115,9 @@ export class ChunkManager {
     }
 
     // Ensure loaded-but-unrendered chunks within render radius get (re)meshed.
-    for (let dz = -RENDER_RADIUS; dz <= RENDER_RADIUS; dz++) {
-      for (let dx = -RENDER_RADIUS; dx <= RENDER_RADIUS; dx++) {
-        if (dx * dx + dz * dz > RENDER_RADIUS * RENDER_RADIUS) continue;
+    for (let dz = -this.renderRadius; dz <= this.renderRadius; dz++) {
+      for (let dx = -this.renderRadius; dx <= this.renderRadius; dx++) {
+        if (dx * dx + dz * dz > this.renderRadius * this.renderRadius) continue;
         const cx = this.pcx + dx;
         const cz = this.pcz + dz;
         const chunk = this.world.getChunk(cx, cz);
@@ -134,7 +149,7 @@ export class ChunkManager {
   private withinRender(cx: number, cz: number): boolean {
     const dx = cx - this.pcx;
     const dz = cz - this.pcz;
-    return dx * dx + dz * dz <= RENDER_RADIUS * RENDER_RADIUS;
+    return dx * dx + dz * dz <= this.renderRadius * this.renderRadius;
   }
 
   private neighborsReady(cx: number, cz: number): boolean {

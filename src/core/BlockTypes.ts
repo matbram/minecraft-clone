@@ -75,6 +75,8 @@ export const IS_TRANSPARENT = new Uint8Array(BLOCK_COUNT);
 export const IS_SOLID = new Uint8Array(BLOCK_COUNT);
 // Light emission (0..15). Hook for Phase 3 block-light BFS.
 export const LIGHT_EMISSION = new Uint8Array(BLOCK_COUNT);
+// Foliage flag (Phase 4a waving-foliage vertex offset). Visual only.
+export const IS_FOLIAGE = new Uint8Array(BLOCK_COUNT);
 
 (function initBlockFlags() {
   // Default: opaque, solid, no emission.
@@ -98,6 +100,9 @@ export const LIGHT_EMISSION = new Uint8Array(BLOCK_COUNT);
 
   // Glowstone emits full light (Phase 3 hook).
   LIGHT_EMISSION[Block.GLOWSTONE] = 15;
+
+  // Leaves wave (also covers the grass decoration, placed as LEAVES).
+  IS_FOLIAGE[Block.LEAVES] = 1;
 })();
 
 // ---------------------------------------------------------------------------

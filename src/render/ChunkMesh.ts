@@ -9,7 +9,7 @@
 //   them as max(block, sky*day)*ao.
 
 import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT } from '../core/constants';
-import { Block, IS_TRANSPARENT, tileOf, ATLAS_COLS } from '../core/BlockTypes';
+import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
 import type { World } from '../world/World';
@@ -20,6 +20,7 @@ export interface MeshArrays {
   normals: Float32Array;
   light: Float32Array; // 3 floats/vertex: sky, block, ao
   uvs: Float32Array;
+  wave: Float32Array; // 1 float/vertex: 1 = foliage (waves), 0 = static
   indices: Uint32Array;
 }
 
@@ -65,12 +66,13 @@ interface Accum {
   normals: number[];
   light: number[];
   uvs: number[];
+  wave: number[];
   indices: number[];
   count: number;
 }
 
 function newAccum(): Accum {
-  return { positions: [], normals: [], light: [], uvs: [], indices: [], count: 0 };
+  return { positions: [], normals: [], light: [], uvs: [], wave: [], indices: [], count: 0 };
 }
 
 function finalize(a: Accum): MeshArrays | null {
@@ -80,6 +82,7 @@ function finalize(a: Accum): MeshArrays | null {
     normals: new Float32Array(a.normals),
     light: new Float32Array(a.light),
     uvs: new Float32Array(a.uvs),
+    wave: new Float32Array(a.wave),
     indices: new Uint32Array(a.indices),
   };
 }
@@ -144,6 +147,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const wx = baseX + lx;
         const wz = baseZ + lz;
         const acc = NEEDS_BLEND.has(b) ? transparent : opaque;
+        const waveFlag = IS_FOLIAGE[b] ? 1 : 0;
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
@@ -217,6 +221,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const cu = face.uv[i][0];
             const cv = face.uv[i][1];
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
+            acc.wave.push(waveFlag);
           }
 
           // Flip the quad diagonal to avoid AO interpolation artifacts.

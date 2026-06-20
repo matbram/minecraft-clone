@@ -82,3 +82,31 @@ export const LIGHT_AMBIENT = 0.06; // uAmbient: cave floor so dark != pure black
 export const DAY_FACTOR_DEFAULT = 1.0; // uDayFactor: full day (Phase 4a animates)
 // Ambient-occlusion brightness by occlusion level (0 = darkest corner .. 3 = open).
 export const AO_CURVE = [0.45, 0.65, 0.85, 1.0];
+
+// ---------------------------------------------------------------------------
+// Phase 4a: cinematic basics (day/night, post FX, presets).
+// ---------------------------------------------------------------------------
+export const DAY_CYCLE_SECONDS = 480; // full day/night cycle length
+export const DAY_START_PHASE = 0.3; // bright mid-morning on first load
+export const DAY_FF_MULT = 60; // hold-to-fast-forward multiplier
+
+export const TONE_EXPOSURE = 1.05; // ACES exposure (OutputPass)
+export const BLOOM_THRESHOLD = 0.85;
+export const BLOOM_STRENGTH = 0.55;
+export const BLOOM_RADIUS = 0.4;
+
+export const GODRAYS_DENSITY = 0.92;
+export const GODRAYS_WEIGHT = 0.35;
+export const GODRAYS_DECAY = 0.95;
+export const GODRAYS_EXPOSURE = 0.5;
+
+export const WIND_STRENGTH = 0.06; // foliage sway amplitude (block units)
+export const WIND_SPEED = 1.6;
+export const STAR_COUNT = 1400;
+
+export const FOG_DENSITY_DAY = 0.0145;
+export const FOG_DENSITY_NIGHT = 0.02;
+
+export const RENDER_DISTANCE_LOW = 5;
+export const RENDER_DISTANCE_MED = 8; // == RENDER_DISTANCE (Medium holds 60fps)
+export const RENDER_DISTANCE_CINEMATIC = 11;
