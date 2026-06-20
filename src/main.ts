@@ -46,12 +46,14 @@ import { Stars } from './render/Stars';
 import { Composer } from './render/post/Composer';
 import { ShadowMapper } from './render/shadows/ShadowMapper';
 import { PlanarReflection } from './render/water/PlanarReflection';
-import { Preset, PRESETS, nextPreset, type QualitySettings } from './render/Quality';
+import { Preset, PRESETS, nextPreset, presetByName, type QualitySettings } from './render/Quality';
 import { TextureRegistry } from './render/textures/TextureSource';
 import { ProceduralTextureSource } from './render/textures/ProceduralTextureSource';
 import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
 import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { UnderwaterParticles } from './render/UnderwaterParticles';
+import { Settings } from './ui/Settings';
+import { PauseMenu } from './ui/PauseMenu';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -67,8 +69,8 @@ const seed = readSeed();
 // Show a clear, actionable message instead of a silent blue screen when the
 // browser refuses a WebGL context (GPU acceleration off / GPU blocklisted).
 function showFatalError(title: string, bodyHtml: string): void {
-  const lockHint = document.getElementById('lock-hint');
-  if (lockHint) lockHint.remove();
+  const menuEl = document.getElementById('menu');
+  if (menuEl) menuEl.remove();
   const el = document.createElement('div');
   el.style.cssText =
     'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
@@ -189,7 +191,8 @@ const effects = new Effects(scene, world, input, player, atlas);
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
-let muted = false;
+const prefs = new Settings();
+let muted = prefs.data.muted;
 
 // --- cinematic (Phase 4a) --------------------------------------------------
 let settings: QualitySettings = PRESETS[Preset.MEDIUM];
@@ -225,27 +228,92 @@ function applyPreset(p: Preset): void {
   shadowMapper.setActive(settings.shadows);
   planarReflection.setActive(settings.waterReflections);
 }
-applyPreset(Preset.MEDIUM);
+// Phase 11a: apply persisted settings. applyPreset sets the preset's default
+// render distance; the saved render-distance override + sensitivity + texture +
+// mute are then applied on top so explicit choices survive reloads.
+applyPreset(presetByName(prefs.data.presetName));
+chunkManager.setRenderDistance(prefs.data.renderDistance);
+input.setSensitivity(prefs.data.sensitivity);
+materials.shared.uAtlas.value = textures.selectById(prefs.data.textureSourceId).getAtlas();
+effects.setMuted(prefs.data.muted);
 
 // --- UI glue ---------------------------------------------------------------
-const lockHint = document.getElementById('lock-hint')!;
+// Settings mutators (shared by the menu controls AND the G/T/M hotkeys) — each
+// applies the change live, persists it, and re-syncs the menu controls.
+function changePreset(name: string): void {
+  applyPreset(presetByName(name));
+  prefs.data.presetName = settings.name;
+  prefs.data.renderDistance = settings.renderDistance; // switching preset resets distance
+  prefs.save();
+  menu.refresh();
+}
+function setTexture(id: string): void {
+  materials.shared.uAtlas.value = textures.selectById(id).getAtlas(); // instant, no re-mesh
+  prefs.data.textureSourceId = textures.active.id;
+  prefs.save();
+  menu.refresh();
+}
+function cycleTexture(): void {
+  materials.shared.uAtlas.value = textures.cycle().getAtlas();
+  prefs.data.textureSourceId = textures.active.id;
+  prefs.save();
+  menu.refresh();
+}
+function setRenderDistance(r: number): void {
+  chunkManager.setRenderDistance(r);
+  prefs.data.renderDistance = r;
+  prefs.save();
+}
+function setSensitivity(s: number): void {
+  input.setSensitivity(s);
+  prefs.data.sensitivity = s;
+  prefs.save();
+}
+function setMuted(m: boolean): void {
+  muted = m;
+  effects.setMuted(m);
+  prefs.data.muted = m;
+  prefs.save();
+  menu.refresh();
+}
+function setSurvival(s: boolean): void {
+  prefs.data.survival = s;
+  prefs.save();
+  // Survival mechanics + HUD arrive in Phase 11b; this only persists the choice.
+}
+
+const menu = new PauseMenu(document.getElementById('menu')!, prefs, textures.ids, {
+  onResume: () => input.requestLock(),
+  onPreset: changePreset,
+  onTexture: setTexture,
+  onRenderDistance: setRenderDistance,
+  onSensitivity: setSensitivity,
+  onMuted: setMuted,
+  onSurvival: setSurvival,
+});
+
+// The menu is the start screen (first load) and the pause screen (Esc): shown
+// whenever the pointer is unlocked, except while the inventory overlay is open.
+function updateMenuVisibility(): void {
+  menu.setVisible(!input.locked && !inventory.open);
+}
+
 input.onLockChange = (locked) => {
   if (locked && !audioResumed) {
     effects.resumeAudio(); // pointer-lock click is the user gesture for WebAudio
     audioResumed = true;
   }
-  lockHint.classList.toggle('hidden', locked || inventory.open);
   if (locked && inventory.open) inventory.close(); // clicking back into the game closes inventory
+  updateMenuVisibility();
 };
 inventory.onOpen = () => {
   input.releaseLock();
   interaction.setPaused(true);
-  lockHint.classList.add('hidden');
+  updateMenuVisibility(); // keep the menu hidden while the inventory is open
 };
 inventory.onClose = () => {
   interaction.setPaused(false);
-  // Pointer is still unlocked after closing; prompt the user to click back in.
-  if (!input.locked) lockHint.classList.remove('hidden');
+  updateMenuVisibility(); // pointer still unlocked after closing -> show the menu
 };
 
 input.onWheel = (dir) => hotbar.cycle(dir);
@@ -253,6 +321,10 @@ input.onMouseDown = (button) => {
   if (button === 2) interaction.tryPlace();
 };
 input.onKeyPress = (code) => {
+  if (code === 'Escape') {
+    if (inventory.open) inventory.close(); // (when locked, the browser exits lock -> menu)
+    return;
+  }
   if (code === 'KeyE') {
     inventory.toggle();
     return;
@@ -262,16 +334,15 @@ input.onKeyPress = (code) => {
     return;
   }
   if (code === 'KeyM') {
-    muted = !muted;
-    effects.setMuted(muted);
+    setMuted(!muted);
     return;
   }
   if (code === 'KeyT') {
-    materials.shared.uAtlas.value = textures.cycle().getAtlas(); // instant, no re-mesh
+    cycleTexture();
     return;
   }
   if (code === 'KeyG') {
-    applyPreset(nextPreset(settings.preset));
+    changePreset(PRESETS[nextPreset(settings.preset)].name);
     return;
   }
   if (code === 'KeyP') {
@@ -283,6 +354,9 @@ input.onKeyPress = (code) => {
     if (n >= 1 && n <= 9) hotbar.select(n - 1);
   }
 };
+
+// Show the start screen on first load (pointer is unlocked).
+updateMenuVisibility();
 
 const hud = document.getElementById('hud')!;
 

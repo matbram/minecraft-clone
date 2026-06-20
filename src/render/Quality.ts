@@ -80,3 +80,10 @@ export const PRESETS: Record<Preset, QualitySettings> = {
 export function nextPreset(p: Preset): Preset {
   return p === Preset.LOW ? Preset.MEDIUM : p === Preset.MEDIUM ? Preset.CINEMATIC : Preset.LOW;
 }
+
+// Resolve a persisted preset name back to its enum (defaults to Medium).
+export function presetByName(name: string): Preset {
+  if (name === 'Low') return Preset.LOW;
+  if (name === 'Cinematic') return Preset.CINEMATIC;
+  return Preset.MEDIUM;
+}

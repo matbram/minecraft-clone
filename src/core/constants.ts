@@ -118,6 +118,17 @@ export const RENDER_DISTANCE_LOW = 5;
 export const RENDER_DISTANCE_MED = 8; // == RENDER_DISTANCE (Medium holds 60fps)
 export const RENDER_DISTANCE_CINEMATIC = 11;
 
+// Phase 11a: user-settable look sensitivity (radians of yaw per pixel of mouse
+// movement). Default mirrors the old hardcoded Input value; the settings menu
+// lets the player tune it and persists the choice.
+export const DEFAULT_SENSITIVITY = 0.0025;
+export const SENSITIVITY_MIN = 0.0008;
+export const SENSITIVITY_MAX = 0.006;
+// Render-distance slider bounds (chunk ring radius). Min keeps the world coherent;
+// max is generous for strong machines (presets stay 5/8/11).
+export const RENDER_DISTANCE_MIN = 3;
+export const RENDER_DISTANCE_MAX = 16;
+
 // ---------------------------------------------------------------------------
 // Phase 4b: dynamic sun shadows + reflective water (Cinematic only).
 // ---------------------------------------------------------------------------

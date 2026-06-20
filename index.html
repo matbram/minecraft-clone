@@ -23,14 +23,44 @@
       #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
       #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
 
-      /* Lock prompt */
-      #lock-hint {
-        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-        font: 16px/1.4 system-ui, sans-serif; color: #fff; text-align: center;
-        background: rgba(0,0,0,0.55); padding: 18px 26px; border-radius: 10px;
-        pointer-events: none; user-select: none;
+      /* Pause / start menu overlay (Phase 11a) — shown whenever pointer unlocked */
+      #menu {
+        position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.6); z-index: 60; user-select: none;
       }
-      #lock-hint.hidden { display: none; }
+      .menu-panel {
+        background: #1a2733; border: 1px solid #34506a; border-radius: 12px;
+        padding: 22px 26px; width: 380px; max-width: 90vw;
+        font: 14px/1.4 system-ui, sans-serif; color: #dce9f7;
+        max-height: 92vh; overflow-y: auto;
+      }
+      .menu-title { font-size: 22px; font-weight: 600; text-align: center; margin-bottom: 16px; }
+      .menu-btn {
+        display: block; width: 100%; padding: 10px; margin-bottom: 8px;
+        font: 600 16px/1 system-ui, sans-serif; color: #0c1620;
+        background: #6fc36f; border: none; border-radius: 8px; cursor: pointer;
+      }
+      .menu-btn:hover { background: #82d682; }
+      .menu-section {
+        font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em;
+        color: #8fb0cc; margin: 14px 0 8px; border-bottom: 1px solid #2a3f54; padding-bottom: 4px;
+      }
+      .menu-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+      .menu-row > span:first-child { flex: 0 0 118px; color: #c4d6ea; }
+      .menu-row select, .menu-row input[type="range"] { flex: 1; min-width: 0; }
+      .menu-row select {
+        background: #0f1b26; color: #dce9f7; border: 1px solid #34506a;
+        border-radius: 6px; padding: 4px 6px;
+      }
+      .menu-row input[type="range"] { accent-color: #6fc36f; }
+      .menu-val {
+        flex: 0 0 42px; text-align: right; color: #9fc0dc; font-variant-numeric: tabular-nums;
+      }
+      .menu-check { cursor: pointer; }
+      .menu-check input { margin-left: auto; width: 16px; height: 16px; accent-color: #6fc36f; }
+      .menu-controls {
+        margin-top: 8px; font: 12px/1.6 ui-monospace, Menlo, Consolas, monospace; color: #9fb6cc;
+      }
 
       /* Debug HUD */
       #hud {
@@ -89,10 +119,10 @@
   <body>
     <div id="app"></div>
     <div id="crosshair"></div>
-    <div id="lock-hint">Click to play<br /><small>WASD move · Space jump · Ctrl sprint · Shift sneak<br />LMB break · RMB place · 1–9 select · E inventory · F fly · M mute<br />T textures · G quality · N fast-forward time · P pause time · Esc release</small></div>
     <div id="hud"></div>
     <div id="hotbar"></div>
     <div id="inventory"></div>
+    <div id="menu"></div>
     <div id="underwater-tint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

@@ -2,6 +2,8 @@
 // tracked manually. Holds key + mouse-button state and exposes edge callbacks.
 // Owns NO movement — the Player reads state from here and moves itself.
 
+import { DEFAULT_SENSITIVITY } from '../core/constants';
+
 export class Input {
   yaw = 0;
   pitch = 0;
@@ -16,7 +18,7 @@ export class Input {
   private readonly dom: HTMLElement;
   private readonly keys = new Set<string>();
   private readonly mouse = new Set<number>();
-  private readonly sensitivity = 0.0025;
+  private sensitivity = DEFAULT_SENSITIVITY; // settable via the settings menu
 
   constructor(dom: HTMLElement) {
     this.dom = dom;
@@ -78,6 +80,9 @@ export class Input {
   }
   isMouseDown(button: number): boolean {
     return this.mouse.has(button);
+  }
+  setSensitivity(s: number): void {
+    this.sensitivity = s;
   }
   requestLock(): void {
     this.dom.requestPointerLock();

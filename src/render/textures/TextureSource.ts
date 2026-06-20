@@ -20,8 +20,19 @@ export class TextureRegistry {
     return this.sources[this.idx];
   }
 
+  get ids(): string[] {
+    return this.sources.map((s) => s.id);
+  }
+
   cycle(): TextureSource {
     this.idx = (this.idx + 1) % this.sources.length;
+    return this.active;
+  }
+
+  // Select by id (settings restore / menu pick). Unknown id keeps the current one.
+  selectById(id: string): TextureSource {
+    const i = this.sources.findIndex((s) => s.id === id);
+    if (i >= 0) this.idx = i;
     return this.active;
   }
 }
