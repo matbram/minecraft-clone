@@ -48,19 +48,21 @@ export class SunMoon {
     ]);
 
     this.glow = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }),
+      new THREE.SpriteMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false }),
     );
     this.sun = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false }),
+      new THREE.SpriteMaterial({ map: sunTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false }),
     );
     this.moon = new THREE.Sprite(
-      new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthTest: false, depthWrite: false }),
+      new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthTest: true, depthWrite: false }),
     );
     this.glow.scale.setScalar(160);
     this.sun.scale.setScalar(50);
     this.moon.scale.setScalar(40);
     for (const s of [this.glow, this.sun, this.moon]) {
-      s.renderOrder = -1; // behind world geometry, in front of sky dome
+      // depthTest occludes them behind terrain; the sky dome doesn't write depth,
+      // so they still show against the sky. renderOrder keeps them before water.
+      s.renderOrder = -1;
       scene.add(s);
     }
   }
@@ -70,8 +72,9 @@ export class SunMoon {
     this.glow.position.copy(this.sun.position);
     this.moon.position.copy(camPos).addScaledVector(day.moonDir, DIST);
 
-    const sunUp = THREE.MathUtils.clamp(day.sunDir.y * 3 + 0.3, 0, 1);
-    const moonUp = THREE.MathUtils.clamp(day.moonDir.y * 3 + 0.3, 0, 1);
+    // Fade out right at the horizon so a sub-horizon sun/moon doesn't linger.
+    const sunUp = THREE.MathUtils.clamp(day.sunDir.y * 6 + 0.1, 0, 1);
+    const moonUp = THREE.MathUtils.clamp(day.moonDir.y * 6 + 0.1, 0, 1);
     this.sun.material.opacity = sunUp;
     this.glow.material.opacity = sunUp;
     this.moon.material.opacity = moonUp * 0.9;

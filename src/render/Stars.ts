@@ -37,7 +37,7 @@ export class Stars {
       transparent: true,
       opacity: 0,
       depthWrite: false,
-      depthTest: false,
+      depthTest: true, // occluded by terrain; sky dome doesn't write depth
       fog: false,
     });
     this.points = new THREE.Points(geo, this.mat);
