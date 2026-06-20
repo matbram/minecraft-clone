@@ -52,6 +52,7 @@ import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
 import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { UnderwaterParticles } from './render/UnderwaterParticles';
 import { BubbleParticles } from './render/BubbleParticles';
+import { WaterCeiling } from './render/WaterCeiling';
 import { Settings } from './ui/Settings';
 import { PauseMenu } from './ui/PauseMenu';
 import { Survival } from './player/Survival';
@@ -238,6 +239,7 @@ const tmpSunUv = new THREE.Vector3();
 const underwaterOverlay = new UnderwaterOverlay(document.getElementById('underwater-tint')!);
 const underwaterParticles = new UnderwaterParticles(scene, UNDERWATER_PARTICLES);
 const bubbles = new BubbleParticles(scene); // Phase 11.5: bubbles rising from the player
+const waterCeiling = new WaterCeiling(scene); // Phase 11.5b: visible surface from below
 let wasSubmerged = false; // edge-detect surface crossings for the splash
 let splashCooldown = 0; // rate-limits splash so bobbing at the surface doesn't spam
 let bubbleSfxTimer = 0; // throttles occasional bubble blips while submerged
@@ -605,14 +607,25 @@ function frame(now: number): void {
     if (surfaceY - camera.position.y < 0.6) {
       waterline = Math.min(1, Math.max(0, 0.5 - input.pitch * 0.7));
     }
+    // Phase 11.5b: the visible water surface from below — a rippling ceiling at the
+    // local surface, scaled by the light actually here (so it dims with depth / in
+    // caves / at night, like the rest of the underwater stack). This is the real fix
+    // for "no surface"; it supersedes the old screen-space Snell wash.
+    waterCeiling.update(
+      camera.position,
+      surfaceY,
+      now / 1000,
+      Math.min(1, uwBright * 1.2),
+      settings.usePost ? uwFogColorLinear : uwFogColorSRGB,
+      settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
+    );
+  } else {
+    waterCeiling.hide();
   }
   underwaterOverlay.setWaterline(waterline);
-  // Caustic dapple fades with depth (shallow+lit shimmers most); Snell window
-  // brightens when looking up in shallow water.
+  // Caustic dapple fades with depth (shallow+lit shimmers most).
   const uwCaustic = submerged ? (1 - depthFrac) * uwBright : 0;
-  const lookUp = Math.max(0, Math.sin(input.pitch));
-  const uwSurface = submerged ? lookUp * (1 - depthFrac) * uwBright : 0;
-  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000, uwCaustic, uwSurface);
+  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000, uwCaustic, 0);
   composer.setExposure(Tunables.brightness); // live "Brightness" knob (post path)
   underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
