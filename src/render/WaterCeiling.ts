@@ -24,6 +24,7 @@ const fragmentShader = /* glsl */ `
   precision highp float;
   varying vec3 vWorldPos;
   uniform vec3 uCamPos, uSurfaceColor, uDeepColor;
+  uniform float uStrength; // user tuning knob (0..1): overall surface opacity
   uniform float uTime, uFade;
 
   // Two octaves of drifting waves + a sharper glint band so it reads as a moving
@@ -57,7 +58,9 @@ const fragmentShader = /* glsl */ `
     // still reads as a surface instead of vanishing.
     float dist = length(vWorldPos.xz - uCamPos.xz);
     float distFade = smoothstep(900.0, 60.0, dist);
-    float alpha = mix(0.96, 0.22, win) * distFade * clamp(uFade * 2.0, 0.25, 1.0);
+    // uFade handles light/depth/cave presence; uStrength is the user knob scaling the
+    // overall opacity linearly (so it actually thins the daylit surface, not just dim ones).
+    float alpha = mix(0.96, 0.22, win) * distFade * clamp(uFade * 2.0, 0.25, 1.0) * uStrength;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;
@@ -73,6 +76,7 @@ export class WaterCeiling {
       uniforms: {
         uTime: { value: 0 },
         uFade: { value: 0 },
+        uStrength: { value: 1 },
         uCamPos: { value: new THREE.Vector3() },
         uSurfaceColor: { value: new THREE.Color(0x3f86a0) },
         uDeepColor: { value: new THREE.Color(0x0a2230) },
@@ -92,16 +96,18 @@ export class WaterCeiling {
 
   // Place the sheet at the local surface height above the camera and shade it. `fade`
   // (0..1) is the light at the SURFACE (≈full sky in open water, ≈0 in a sealed cave,
-  // dimmed gently with depth); <= 0 hides it. `surfaceY` must be above the camera.
+  // dimmed gently with depth). `strength` (0..1) is the user "Water surface" knob scaling
+  // overall opacity; either at ~0 hides it. `surfaceY` must be above the camera.
   update(
     camPos: THREE.Vector3,
     surfaceY: number,
     time: number,
     fade: number,
+    strength: number,
     surfaceColor: THREE.Color,
     deepColor: THREE.Color,
   ): void {
-    if (fade <= 0.001 || surfaceY <= camPos.y) {
+    if (fade <= 0.001 || strength <= 0.001 || surfaceY <= camPos.y) {
       this.mesh.visible = false;
       return;
     }
@@ -109,6 +115,7 @@ export class WaterCeiling {
     this.mesh.position.set(camPos.x, surfaceY, camPos.z);
     this.mat.uniforms.uTime.value = time;
     this.mat.uniforms.uFade.value = Math.min(1, fade);
+    this.mat.uniforms.uStrength.value = Math.min(1, strength);
     (this.mat.uniforms.uCamPos.value as THREE.Vector3).copy(camPos);
     (this.mat.uniforms.uSurfaceColor.value as THREE.Color).copy(surfaceColor);
     (this.mat.uniforms.uDeepColor.value as THREE.Color).copy(deepColor);

@@ -13,6 +13,7 @@ import {
   WATER_LIGHT_ABSORB,
   UNDERWATER_VISIBILITY_DENSITY,
   UW_VEIL_BASE,
+  WATER_SURFACE_VISIBILITY,
 } from './constants';
 
 export interface TunableValues {
@@ -21,6 +22,7 @@ export interface TunableValues {
   waterAbsorb: number; // light lost per water block of depth; REMESH on change
   underwaterDensity: number; // per-meter underwater view fog (clarity / visibility)
   underwaterTint: number; // screen veil strength underwater
+  waterSurface: number; // visibility of the surface ceiling seen from below (0 = off)
   dayLengthMult: number; // day/night speed multiplier (1 = default)
 }
 
@@ -30,6 +32,7 @@ export const TUNABLE_DEFAULTS: Readonly<TunableValues> = {
   waterAbsorb: WATER_LIGHT_ABSORB,
   underwaterDensity: UNDERWATER_VISIBILITY_DENSITY,
   underwaterTint: UW_VEIL_BASE,
+  waterSurface: WATER_SURFACE_VISIBILITY,
   dayLengthMult: 1,
 };
 

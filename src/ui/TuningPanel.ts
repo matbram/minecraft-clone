@@ -125,6 +125,18 @@ function makeKnobs(time: { phase: number }): Knob[] {
       set: (s) => (Tunables.waterAbsorb = s / 100),
       fmt: (s) => `${s}`,
     },
+    {
+      label: 'Water surface',
+      desc: 'How visible the water surface is when you look up from underwater. 0 = off.',
+      group: 'Water',
+      min: 0,
+      max: 100,
+      step: 5,
+      heavy: undefined,
+      get: () => Math.round(Tunables.waterSurface * 100),
+      set: (s) => (Tunables.waterSurface = s / 100),
+      fmt: (s) => `${s}%`,
+    },
   ];
 }
 

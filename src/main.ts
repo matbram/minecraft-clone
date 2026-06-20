@@ -620,6 +620,7 @@ function frame(now: number): void {
       surfaceY,
       now / 1000,
       ceilFade,
+      Tunables.waterSurface,
       settings.usePost ? uwFogColorLinear : uwFogColorSRGB,
       settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
     );
