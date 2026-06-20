@@ -16,8 +16,6 @@ import {
   UNDERWATER_DEEP_FOG_DENSITY,
   UNDERWATER_MAX_DEPTH,
   UNDERWATER_LIGHT_DEPTH,
-  UNDERWATER_RAY_BOOST,
-  UNDERWATER_FILL,
   UNDERWATER_PARTICLES,
   WATER_SURFACE_Y,
   MAX_FLUID_OPS_PER_TICK,
@@ -394,20 +392,23 @@ function frame(now: number): void {
   // eye is, drive the in-shader absorption/caustics, tint overlay, and a
   // depth-scaled post wobble (clear & shaft-lit shallow -> moody deep). Reflections
   // are already disabled below the surface.
+  // Underwater colour/veil must track the ACTUAL incoming light so night underwater
+  // is dark (only moonlight + placed lights penetrate), never brighter than the
+  // surface. uwLight ~1 by day, ~0.2 at night.
+  const uwLight = submerged
+    ? Math.min(Math.max(dayNight.dayFactor + dayNight.moonFactor, 0.04), 1)
+    : 0;
   if (submerged) {
     const shallow = settings.usePost ? uwFogColorLinear : uwFogColorSRGB;
     const deep = settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB;
-    materials.shared.uFogColor.value.copy(shallow).lerp(deep, uwDepth);
+    materials.shared.uFogColor.value.copy(shallow).lerp(deep, uwDepth).multiplyScalar(uwLight);
     materials.shared.uFogDensity.value =
       UNDERWATER_FOG_DENSITY + (UNDERWATER_DEEP_FOG_DENSITY - UNDERWATER_FOG_DENSITY) * uwDepth;
   }
   materials.shared.uUnderwater.value = submerged ? 1 : 0;
   materials.shared.uUnderwaterDepth.value = uwDepth;
-  // Scattered ambient: present near the surface in daylight, fades with depth/night.
-  materials.shared.uUnderwaterFill.value = submerged
-    ? (1 - uwDepth) * dayNight.dayFactor * UNDERWATER_FILL
-    : 0;
-  underwaterOverlay.setActive(submerged);
+  // Blue veil: deeper = stronger, but scaled by the real light so it dims at night.
+  underwaterOverlay.setIntensity(submerged ? (0.35 + 0.45 * uwDepth) * uwLight : 0);
   composer.setUnderwater(submerged ? 0.12 + 0.88 * uwDepth : 0, now / 1000);
   underwaterParticles.update(frameDt, camera.position, submerged);
 
@@ -420,13 +421,18 @@ function frame(now: number): void {
 
   if (settings.usePost) {
     if (settings.godRays) {
-      // Sun shafts by day; moon shafts underwater at night. Boosted near the
-      // surface so light rays read entering the water (weaken with depth as the
-      // sun/moon disc fades).
-      let vis = dayNight.sunAboveHorizon && sunMoon.sunScreenPos(camera, tmpSunUv);
-      if (!vis && submerged) vis = sunMoon.moonScreenPos(camera, tmpSunUv);
-      const rayBoost = submerged ? UNDERWATER_RAY_BOOST : 1;
-      composer.updateGodRays(tmpSunUv, vis, (1 + dayNight.sunGlow * 2) * rayBoost);
+      // Shafts from whichever disc is up — sun by day (strong), moon by night
+      // (faint) — the SAME above and below water (no underwater special-casing).
+      let vis: boolean;
+      let intensity: number;
+      if (dayNight.sunAboveHorizon) {
+        vis = sunMoon.sunScreenPos(camera, tmpSunUv);
+        intensity = 1 + dayNight.sunGlow * 2;
+      } else {
+        vis = sunMoon.moonScreenPos(camera, tmpSunUv);
+        intensity = 0.5; // dim moonlight shafts
+      }
+      composer.updateGodRays(tmpSunUv, vis, intensity);
     }
     composer.render();
   } else {

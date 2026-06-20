@@ -78,7 +78,7 @@ export const BREAK_STAGES = 10; // crack overlay stages
 export const MAX_LIGHT = 15;
 export const SKY_DEFAULT = 15; // light above the world top
 export const MAX_LIGHT_PER_FRAME = 3; // chunks fully (re)lit per frame (throttle)
-export const LIGHT_AMBIENT = 0.06; // uAmbient: cave floor so dark != pure black
+export const LIGHT_AMBIENT = 0.012; // uAmbient: near-black floor so unlit caves/interiors need a light
 export const DAY_FACTOR_DEFAULT = 1.0; // uDayFactor: full day (Phase 4a animates)
 // Ambient-occlusion brightness by occlusion level (0 = darkest corner .. 3 = open).
 export const AO_CURVE = [0.45, 0.65, 0.85, 1.0];
@@ -164,9 +164,7 @@ export const UNDERWATER_SURFACE_COLOR = 0x3a7a8c; // lit teal toward the surface
 export const UNDERWATER_DEEP_FOG_DENSITY = 0.16; // denser/darker the deeper you go
 export const UNDERWATER_MAX_DEPTH = 32; // blocks below surface for full murk (gradual)
 export const CAUSTIC_STRENGTH = 0.22; // rippling-light highlight amount (less spotlighting)
-export const UNDERWATER_FILL = 0.18; // scattered near-surface ambient (daylight, fades w/ depth)
 export const UNDERWATER_LIGHT_DEPTH = 20; // blocks over which surface light (sky/sun/rays) fades
-export const UNDERWATER_RAY_BOOST = 2.0; // god-ray shaft strength multiplier while submerged
 export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
 
 // ---------------------------------------------------------------------------

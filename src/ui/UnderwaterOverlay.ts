@@ -1,15 +1,17 @@
-// Phase 5 — full-screen blue tint shown while the camera eye is underwater.
-// Pure DOM (mirrors the Inventory show/hide pattern); the CSS opacity transition
-// gives a soft fade so it doesn't pop at the exact surface line.
+// Phase 5/11 — full-screen blue tint shown while the camera eye is underwater.
+// Pure DOM. The intensity is driven each frame (depth + actual light level) so the
+// veil dims at night and with the surface light, never glowing on its own.
 
 export class UnderwaterOverlay {
-  private active = false;
+  private cur = -1;
 
   constructor(private readonly el: HTMLElement) {}
 
-  setActive(active: boolean): void {
-    if (active === this.active) return;
-    this.active = active;
-    this.el.classList.toggle('active', active);
+  // intensity 0..1 (0 = above water / off). CSS transition smooths the fade.
+  setIntensity(intensity: number): void {
+    const v = Math.max(0, Math.min(1, intensity));
+    if (v === this.cur) return;
+    this.cur = v;
+    this.el.style.opacity = String(v);
   }
 }
