@@ -5,6 +5,7 @@
 // defaults and never throw.
 
 import { DEFAULT_SENSITIVITY, RENDER_DISTANCE_MED } from '../core/constants';
+import { TUNABLE_DEFAULTS, type TunableValues } from '../core/tunables';
 
 const KEY = 'mc_settings_v1';
 
@@ -15,6 +16,7 @@ export interface SettingsData {
   sensitivity: number; // mouse-look radians per pixel
   muted: boolean;
   survival: boolean; // false = Creative (default); survival mechanics land in 11b
+  tuning: TunableValues; // Phase 11.3: live light/water tuning knobs
 }
 
 export const DEFAULT_SETTINGS: SettingsData = {
@@ -24,6 +26,7 @@ export const DEFAULT_SETTINGS: SettingsData = {
   sensitivity: DEFAULT_SENSITIVITY,
   muted: false,
   survival: false,
+  tuning: { ...TUNABLE_DEFAULTS },
 };
 
 export class Settings {
@@ -38,7 +41,11 @@ export class Settings {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         // Merge over defaults so a stored object missing newer keys still works.
-        return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<SettingsData>) };
+        const parsed = JSON.parse(raw) as Partial<SettingsData>;
+        const merged = { ...DEFAULT_SETTINGS, ...parsed };
+        // Nested tuning needs its own merge so new knobs fall back to defaults.
+        merged.tuning = { ...DEFAULT_SETTINGS.tuning, ...(parsed.tuning ?? {}) };
+        return merged;
       }
     } catch {
       /* unavailable / corrupt storage -> defaults */

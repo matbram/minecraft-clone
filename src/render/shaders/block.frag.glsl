@@ -142,13 +142,13 @@ void main() {
     outA = mix(tex.a, 1.0, fres * 0.5); // grazing water reads more solid/mirror-like
   }
 
-  // Underwater light absorption: water removes red fastest with view distance
-  // (-> blue-green). Scaled by depth so the near-surface stays clear and only
-  // deep water absorbs hard; plus a global darkening the deeper the eye is.
+  // Underwater light absorption along the view ray: water removes red fastest with
+  // distance (-> blue-green). This is a CONSTANT per-meter water property (clarity),
+  // independent of depth (Phase 11.2). Distance darkening now comes from the
+  // light-scaled veil (uFogColor) plus each surface's own baked light, so a shallow
+  // pool reads clear while a deep column darkens because little light reaches it.
   if (uUnderwater > 0.5) {
-    float absorbAmt = 0.3 + 0.7 * uUnderwaterDepth;
-    color *= exp(-vFogDepth * vec3(0.020, 0.009, 0.004) * absorbAmt);
-    color *= mix(1.0, 0.35, uUnderwaterDepth);
+    color *= exp(-vFogDepth * vec3(0.020, 0.009, 0.004));
   }
 
   // Exponential distance fog so the render edge dissolves into the sky color.

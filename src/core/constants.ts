@@ -80,6 +80,11 @@ export const SKY_DEFAULT = 15; // light above the world top
 export const MAX_LIGHT_PER_FRAME = 3; // chunks fully (re)lit per frame (throttle)
 export const LIGHT_AMBIENT = 0.0; // no fake floor: unlit caves/interiors are black (need a light)
 export const DAY_FACTOR_DEFAULT = 1.0; // uDayFactor: full day (Phase 4a animates)
+// Phase 11.2: sky-light spread cost for every NON-sunbeam step (horizontal / up /
+// attenuated-down). A straight-down step from a full (15) cell stays free (a real
+// sunbeam down a shaft); everything else costs this, so daylight dies ~5 blocks into
+// caves instead of bleeding 15. Higher = darker caves. (Default for Tunables.skySideCost.)
+export const SKY_SIDE_COST = 3;
 // Ambient-occlusion brightness by occlusion level (0 = darkest corner .. 3 = open).
 export const AO_CURVE = [0.45, 0.65, 0.85, 1.0];
 
@@ -202,6 +207,14 @@ export const UNDERWATER_MAX_DEPTH = 32; // blocks below surface for full murk (g
 export const CAUSTIC_STRENGTH = 0.22; // rippling-light highlight amount (less spotlighting)
 export const WATER_LIGHT_ABSORB = 0.15; // sky light lost per water block above a surface (baked)
 export const UNDERWATER_LIGHT_DEPTH = 20; // blocks over which surface light (sky/sun/rays) fades
+
+// Phase 11.2: underwater realism is driven by the LOCAL water column above the eye
+// (waterDepthAbove) + the baked light actually present there — NOT absolute depth
+// below sea level. So 2 blocks of water reads clear (bright if lit, dark in a cave),
+// and only a real deep column darkens/blues out. These are the Tunables defaults.
+export const UNDERWATER_COLOR_DEPTH = 16; // water-above (blocks) for full deep-color + sky fade
+export const UNDERWATER_VISIBILITY_DENSITY = 0.05; // constant per-meter view fog (clarity)
+export const UW_VEIL_BASE = 0.45; // screen-tint veil strength (scaled by available light)
 export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
 
 // ---------------------------------------------------------------------------

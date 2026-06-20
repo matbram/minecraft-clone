@@ -77,6 +77,12 @@ export class DayNight {
     this.recompute();
   }
 
+  // Phase 11.3: "Time of day" tuning knob jumps the cycle to a phase (0..1).
+  setPhase(p: number): void {
+    this.phase = ((p % 1) + 1) % 1;
+    this.recompute();
+  }
+
   private sampleStops(e: number, key: 'zen' | 'hor' | 'warm', out: THREE.Color): void {
     let lo = STOPS[0];
     let hi = STOPS[STOPS.length - 1];

@@ -77,6 +77,19 @@ export class World {
     return Math.max(block, sky * skyMul);
   }
 
+  // Phase 11.2: blocks of water directly above (and including) a cell, up to the
+  // first non-water = how deep the eye sits below its LOCAL water surface. Drives
+  // underwater darkening/color from the real column, not absolute depth below sea
+  // level (so a shallow pond deep underground reads shallow). Capped for cost.
+  waterDepthAbove(wx: number, wy: number, wz: number, cap = 30): number {
+    let n = 0;
+    for (let y = wy; y < CY && n < cap; y++) {
+      if (this.getBlockWorld(wx, y, wz) !== Block.WATER) break;
+      n++;
+    }
+    return n;
+  }
+
   getFluidWorld(wx: number, wy: number, wz: number): number {
     if (wy < 0 || wy >= CY) return 0;
     const chunk = this.getChunk(worldToChunk(wx), worldToChunk(wz));

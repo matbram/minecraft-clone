@@ -124,6 +124,35 @@
       }
       #death-overlay.active { opacity: 1; }
 
+      /* Live tuning panel (Phase 11.3) — side panel; world stays visible behind it */
+      #tuning {
+        position: fixed; top: 12px; left: 12px; z-index: 65;
+        width: 270px; max-height: calc(100vh - 24px); overflow-y: auto;
+        padding: 12px 14px; box-sizing: border-box;
+        background: rgba(18, 20, 24, 0.82); color: #e8eaed;
+        border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 8px;
+        font: 12px/1.35 system-ui, sans-serif; user-select: none;
+        backdrop-filter: blur(3px);
+      }
+      .tune-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+      .tune-group {
+        margin: 12px 0 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+        text-transform: uppercase; color: #8fb7d6;
+      }
+      .tune-row { margin: 8px 0; }
+      .tune-head { display: flex; justify-content: space-between; align-items: baseline; }
+      .tune-value { color: #9fe0a0; font-variant-numeric: tabular-nums; }
+      .tune-row input[type='range'] { width: 100%; margin: 3px 0 1px; cursor: pointer; }
+      .tune-desc { color: #9aa0a6; font-size: 11px; }
+      .tune-reset {
+        margin-top: 12px; width: 100%; padding: 6px; cursor: pointer;
+        background: rgba(255, 255, 255, 0.08); color: #e8eaed;
+        border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 5px; font-size: 12px;
+      }
+      .tune-reset:hover { background: rgba(255, 255, 255, 0.16); }
+      .tune-hint { margin-top: 8px; color: #6b7177; font-size: 11px; text-align: center; }
+      .menu-btn-sub { font-size: 13px; opacity: 0.95; }
+
       /* Underwater tint (Phase 5) — fades in while the eye is submerged */
       #underwater-tint {
         position: fixed; inset: 0; pointer-events: none; user-select: none;
@@ -142,6 +171,7 @@
     <div id="survival-hud"></div>
     <div id="inventory"></div>
     <div id="menu"></div>
+    <div id="tuning"></div>
     <div id="death-overlay"></div>
     <div id="underwater-tint"></div>
     <script type="module" src="/src/main.ts"></script>

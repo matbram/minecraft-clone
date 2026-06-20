@@ -20,6 +20,7 @@ export interface MenuHandlers {
   onSensitivity(s: number): void;
   onMuted(muted: boolean): void;
   onSurvival(survival: boolean): void;
+  onTuning(): void; // open the live light/water tuning panel
 }
 
 // Friendlier labels for the texture-source ids.
@@ -158,6 +159,15 @@ export class PauseMenu {
       panel.appendChild(row);
     }
 
+    // Tuning panel launcher (light/water sliders in plain language; also hotkey K).
+    {
+      const btn = document.createElement('button');
+      btn.className = 'menu-btn menu-btn-sub';
+      btn.textContent = 'Tuning (light & water)…';
+      btn.addEventListener('click', () => this.handlers.onTuning());
+      panel.appendChild(btn);
+    }
+
     // Controls cheatsheet.
     const controlsHdr = document.createElement('div');
     controlsHdr.className = 'menu-section';
@@ -168,7 +178,7 @@ export class PauseMenu {
     controls.innerHTML =
       'WASD move · Space jump / swim up · Ctrl sprint · Shift sneak / dive<br />' +
       'LMB break · RMB place / eat · 1–9 select · Wheel cycle · E inventory · F fly<br />' +
-      'T textures · G quality · M mute · N fast-forward time · P pause time · Esc menu';
+      'T textures · G quality · K tuning · M mute · N fast-forward time · P pause time · Esc menu';
     panel.appendChild(controls);
 
     this.container.appendChild(panel);

@@ -115,6 +115,13 @@ export class Chunk {
     this.maxY = maxY;
   }
 
+  // Phase 11.3: drop all baked light so the engine can recompute from scratch (used
+  // when a tuning knob that feeds the light BFS changes). Caller re-queues lighting.
+  clearLight(): void {
+    this.light.fill(0);
+    this.lit = false;
+  }
+
   getSky(i: number): number {
     return (this.light[i] >> 4) & 0xf;
   }

@@ -11,18 +11,15 @@ import {
   WIND_STRENGTH,
   LAYER_TRANSPARENT,
   UNDERWATER_FOG_COLOR,
-  UNDERWATER_FOG_DENSITY,
   UNDERWATER_DEEP_COLOR,
-  UNDERWATER_DEEP_FOG_DENSITY,
-  UNDERWATER_MAX_DEPTH,
-  UNDERWATER_LIGHT_DEPTH,
+  UNDERWATER_COLOR_DEPTH,
   UNDERWATER_PARTICLES,
-  WATER_SURFACE_Y,
   MAX_FLUID_OPS_PER_TICK,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   worldToChunk,
 } from './core/constants';
+import { Tunables } from './core/tunables';
 import { Block } from './core/BlockTypes';
 import { surfaceHeight } from './core/WorldGen';
 import { World } from './world/World';
@@ -58,6 +55,7 @@ import { Settings } from './ui/Settings';
 import { PauseMenu } from './ui/PauseMenu';
 import { Survival } from './player/Survival';
 import { SurvivalHud } from './ui/SurvivalHud';
+import { TuningPanel } from './ui/TuningPanel';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -198,6 +196,9 @@ interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
 const prefs = new Settings();
 let muted = prefs.data.muted;
+// Phase 11.3: seed the live tuning knobs from the saved settings BEFORE the world
+// streams, so the first light/mesh bake already uses the saved values (no rebake).
+Object.assign(Tunables, prefs.data.tuning);
 
 // --- survival (Phase 11b) --------------------------------------------------
 const survival = new Survival();
@@ -317,12 +318,32 @@ const menu = new PauseMenu(document.getElementById('menu')!, prefs, textures.ids
   onSensitivity: setSensitivity,
   onMuted: setMuted,
   onSurvival: setSurvival,
+  onTuning: () => tuning.show(),
+});
+
+// Phase 11.3: live tuning panel (K). A side panel that leaves the world visible so
+// edits show instantly; mirrors the inventory's lock handling so it coexists with the
+// pause menu. Heavy knobs rebuild loaded chunks through the throttled queues.
+const tuning = new TuningPanel(document.getElementById('tuning')!, {
+  onOpen: () => {
+    inventory.close();
+    input.releaseLock();
+    updateMenuVisibility();
+  },
+  onClose: () => updateMenuVisibility(),
+  onChange: () => {
+    prefs.data.tuning = { ...Tunables };
+    prefs.save();
+  },
+  onRelight: () => chunkManager.rebuildLighting(),
+  onRemesh: () => chunkManager.remeshAll(),
+  onTimeOfDay: (p) => dayNight.setPhase(p),
 });
 
 // The menu is the start screen (first load) and the pause screen (Esc): shown
-// whenever the pointer is unlocked, except while the inventory overlay is open.
+// whenever the pointer is unlocked, except while the inventory or tuning overlay is open.
 function updateMenuVisibility(): void {
-  menu.setVisible(!input.locked && !inventory.open);
+  menu.setVisible(!input.locked && !inventory.open && !tuning.open);
 }
 
 input.onLockChange = (locked) => {
@@ -331,9 +352,11 @@ input.onLockChange = (locked) => {
     audioResumed = true;
   }
   if (locked && inventory.open) inventory.close(); // clicking back into the game closes inventory
+  if (locked && tuning.open) tuning.close();
   updateMenuVisibility();
 };
 inventory.onOpen = () => {
+  tuning.close();
   input.releaseLock();
   interaction.setPaused(true);
   updateMenuVisibility(); // keep the menu hidden while the inventory is open
@@ -350,10 +373,15 @@ input.onMouseDown = (button) => {
 input.onKeyPress = (code) => {
   if (code === 'Escape') {
     if (inventory.open) inventory.close(); // (when locked, the browser exits lock -> menu)
+    else if (tuning.open) tuning.close();
     return;
   }
   if (code === 'KeyE') {
     inventory.toggle();
+    return;
+  }
+  if (code === 'KeyK') {
+    tuning.toggle();
     return;
   }
   if (code === 'KeyF') {
@@ -451,9 +479,11 @@ function frame(now: number): void {
     if (steps === MAX_SUBSTEPS) accumulator = 0; // drop backlog after a stall
   }
 
-  // Advance the day/night cycle (hold N to fast-forward).
+  // Advance the day/night cycle (hold N to fast-forward; "Day length" knob stretches
+  // it). dayLengthMult > 1 = longer day = slower advance.
   const tScale = input.isDown('KeyN') ? DAY_FF_MULT : 1;
-  dayNight.update(frameDt * tScale);
+  dayNight.update((frameDt * tScale) / Tunables.dayLengthMult);
+  tuning.setPhase(dayNight.phase); // keep the "Time of day" slider tracking the cycle
 
   // Per-frame (responsive): camera, aim, streaming, render.
   const alpha = physicsStarted ? accumulator / FIXED_DT : 0;
@@ -474,12 +504,23 @@ function frame(now: number): void {
       Math.floor(camera.position.y),
       Math.floor(camera.position.z),
     ) === Block.WATER;
-  const uwDepth = submerged
-    ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_MAX_DEPTH, 0), 1)
-    : 0;
-  const lightFade = submerged
-    ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_LIGHT_DEPTH, 0), 1)
-    : 0;
+  // Underwater realism (Phase 11.2): driven by the LOCAL water column above the eye +
+  // the light actually present here, NOT absolute depth below sea level. So 2 blocks
+  // of water read clear (bright if lit, dark in a cave); only a real deep column
+  // darkens + blues out. depthFrac -> colour shift + surface(Snell) fade; uwBright ->
+  // how lit it is here (≈0 in an unlit cave, ~1 in a sunlit shallow pool).
+  let depthFrac = 0;
+  let uwBright = 0;
+  if (submerged) {
+    const ex = Math.floor(camera.position.x);
+    const ey = Math.floor(camera.position.y);
+    const ez = Math.floor(camera.position.z);
+    const eyeWater = world.waterDepthAbove(ex, ey, ez);
+    depthFrac = Math.min(eyeWater / UNDERWATER_COLOR_DEPTH, 1);
+    const downwell = Math.exp(-Tunables.waterAbsorb * eyeWater); // open-column darkening
+    uwBright = Math.min(world.brightnessAt(ex, ey, ez, fxSkyMul) * downwell, 1);
+  }
+  const lightFade = depthFrac; // surface light (sky/sun/rays) fades with local depth
 
   // Survival HUD (Phase 11b): cheap when unchanged (icons redraw only on change);
   // the air row shows while the eye is submerged. Hidden entirely in Creative.
@@ -512,29 +553,24 @@ function frame(now: number): void {
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
 
-  // Underwater (Phase 5/7b/8b): override the shared fog (DayNight rewrote it just
-  // above, so this auto-clears on surfacing), ramp color/density by how deep the
-  // eye is, drive the in-shader absorption/caustics, tint overlay, and a
-  // depth-scaled post wobble (clear & shaft-lit shallow -> moody deep). Reflections
-  // are already disabled below the surface.
-  // Underwater colour/veil must track the ACTUAL incoming light so night underwater
-  // is dark (only moonlight + placed lights penetrate), never brighter than the
-  // surface. uwLight ~1 by day, ~0.2 at night.
-  const uwLight = submerged
-    ? Math.min(Math.max(dayNight.dayFactor + dayNight.moonFactor, 0.04), 1)
-    : 0;
+  // Underwater (Phase 5/7b/8b/11.2): override the shared fog (DayNight rewrote it just
+  // above, so this auto-clears on surfacing). The veil COLOUR shifts shallow->deep by
+  // the local column and is dimmed to the light actually here (dark in a cave, dark at
+  // night); the per-meter VISIBILITY is a constant water clarity (the live tuning knob,
+  // not depth). In-shader absorption/caustics + the post wobble read uUnderwaterDepth.
+  // Reflections are already disabled below the surface.
   if (submerged) {
     const shallow = settings.usePost ? uwFogColorLinear : uwFogColorSRGB;
     const deep = settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB;
-    materials.shared.uFogColor.value.copy(shallow).lerp(deep, uwDepth).multiplyScalar(uwLight);
-    materials.shared.uFogDensity.value =
-      UNDERWATER_FOG_DENSITY + (UNDERWATER_DEEP_FOG_DENSITY - UNDERWATER_FOG_DENSITY) * uwDepth;
+    materials.shared.uFogColor.value.copy(shallow).lerp(deep, depthFrac).multiplyScalar(uwBright);
+    materials.shared.uFogDensity.value = Tunables.underwaterDensity;
   }
   materials.shared.uUnderwater.value = submerged ? 1 : 0;
-  materials.shared.uUnderwaterDepth.value = uwDepth;
-  // Blue veil: deeper = stronger, but scaled by the real light so it dims at night.
-  underwaterOverlay.setIntensity(submerged ? (0.35 + 0.45 * uwDepth) * uwLight : 0);
-  composer.setUnderwater(submerged ? 0.12 + 0.88 * uwDepth : 0, now / 1000);
+  materials.shared.uUnderwaterDepth.value = depthFrac;
+  // Screen veil: tunable tint strength, scaled by the real available light here.
+  underwaterOverlay.setIntensity(submerged ? Tunables.underwaterTint * uwBright : 0);
+  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000);
+  composer.setExposure(Tunables.brightness); // live "Brightness" knob (post path)
   underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
   chunkManager.update(frameDt, player.pos);

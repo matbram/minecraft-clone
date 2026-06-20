@@ -8,7 +8,8 @@
 //   attribute: (skyLight 0..1, blockLight 0..1, ao 0..1). The shader combines
 //   them as max(block, sky*day)*ao.
 
-import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL, WATER_LIGHT_ABSORB } from '../core/constants';
+import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
+import { Tunables } from '../core/tunables';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import { fluidSurfaceHeight } from '../core/fluid';
 import type { Chunk } from '../core/Chunk';
@@ -178,7 +179,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         if (blockAt(wx, y + 1, wz) === Block.WATER) {
           let n = 0;
           for (let yy = y + 1; yy < CY && n < 30 && blockAt(wx, yy, wz) === Block.WATER; yy++) n++;
-          skyAtten = Math.exp(-n * WATER_LIGHT_ABSORB);
+          skyAtten = Math.exp(-n * Tunables.waterAbsorb);
         }
 
         for (let f = 0; f < 6; f++) {

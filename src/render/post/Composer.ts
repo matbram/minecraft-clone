@@ -53,6 +53,7 @@ export class Composer {
   private readonly bloom: UnrealBloomPass;
   private readonly godrays: ShaderPass;
   private readonly underwater: ShaderPass;
+  private readonly aces: ShaderPass;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -76,7 +77,8 @@ export class Composer {
     this.godrays = createGodRaysPass();
     this.composer.addPass(this.godrays);
 
-    this.composer.addPass(new ShaderPass(ACES_PASS)); // always last -> renders to screen
+    this.aces = new ShaderPass(ACES_PASS);
+    this.composer.addPass(this.aces); // always last -> renders to screen
 
     this.setPreset(settings);
     this.setSize(w, h, Math.min(window.devicePixelRatio, 2));
@@ -91,6 +93,11 @@ export class Composer {
     (this.godrays.uniforms.uSunUv.value as THREE.Vector2).set(sunUv.x, sunUv.y);
     this.godrays.uniforms.uVisible.value = visible ? 1 : 0;
     this.godrays.uniforms.uExposure.value = GODRAYS_EXPOSURE * intensity;
+  }
+
+  // Live "Brightness" knob (Tuning panel): ACES exposure. Only affects the post path.
+  setExposure(v: number): void {
+    this.aces.uniforms.uExposure.value = v;
   }
 
   // Per-frame underwater distortion strength (0 = off/passthrough).

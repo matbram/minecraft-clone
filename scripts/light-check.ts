@@ -3,7 +3,7 @@ import { World } from '../src/world/World';
 import { Chunk } from '../src/core/Chunk';
 import { generateChunk, surfaceHeight } from '../src/core/WorldGen';
 import { Block } from '../src/core/BlockTypes';
-import { CX, CY, idx, mod, worldToChunk } from '../src/core/constants';
+import { CX, CY, idx, mod, worldToChunk, SKY_SIDE_COST } from '../src/core/constants';
 
 const SEED = 1337;
 const world = new World(SEED);
@@ -52,6 +52,19 @@ world.editBlock(8, h + 2, 8, Block.STONE); // cover (8,h+1,8) from above
 check('covered cell sky < 15', skyW(8, h + 1, 8) < 15, skyW(8, h + 1, 8));
 world.editBlock(8, h + 2, 8, Block.AIR); // uncover
 check('uncovered cell sky back to 15', skyW(8, h + 1, 8) === 15, skyW(8, h + 1, 8));
+
+// (b2) Phase 11.2 sky side-falloff: in clear air (all sky=15), capping one cell from
+// directly above leaves it lit only by its four open 15-neighbors, so it drops by
+// exactly SKY_SIDE_COST (proves daylight no longer spreads sideways at -1).
+{
+  world.editBlock(8, 121, 8, Block.STONE); // ceiling tile directly above (8,120,8)
+  check(
+    `sky side-step costs SKY_SIDE_COST (= ${SKY_SIDE_COST})`,
+    skyW(8, 120, 8) === 15 - SKY_SIDE_COST,
+    skyW(8, 120, 8),
+  );
+  world.editBlock(8, 121, 8, Block.AIR); // restore
+}
 
 // (c) glowstone in clear air: 15 at source, decays 1/step, 0 beyond reach.
 world.editBlock(8, 120, 8, Block.GLOWSTONE);

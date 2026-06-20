@@ -70,6 +70,26 @@ export class ChunkManager {
     this.pcz = Number.NaN;
   }
 
+  // Phase 11.3 tuning: a knob that feeds the MESH bake (e.g. water depth-darkening)
+  // changed — rebuild every loaded chunk's geometry through the throttled queue.
+  remeshAll(): void {
+    for (const chunk of this.world.chunks.values()) {
+      chunk.dirty = true;
+      this.meshDirty.add(chunkKey(chunk.cx, chunk.cz));
+    }
+  }
+
+  // Phase 11.3 tuning: a knob that feeds the LIGHT BFS (cave darkness) changed —
+  // drop all baked light and recompute + remesh every loaded chunk via the queues.
+  rebuildLighting(): void {
+    for (const chunk of this.world.chunks.values()) {
+      chunk.clearLight();
+      chunk.dirty = true;
+      this.lightDirty.add(chunkKey(chunk.cx, chunk.cz));
+      this.meshDirty.add(chunkKey(chunk.cx, chunk.cz));
+    }
+  }
+
   update(_dt: number, playerPos: THREE.Vector3): void {
     const cx = worldToChunk(playerPos.x);
     const cz = worldToChunk(playerPos.z);

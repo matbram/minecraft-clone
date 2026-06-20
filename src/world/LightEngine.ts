@@ -6,6 +6,7 @@
 // costing 1 per step), NOT IS_SOLID.
 
 import { CX, CZ, CY, COLS, idx, worldToChunk, mod, SKY_DEFAULT } from '../core/constants';
+import { Tunables } from '../core/tunables';
 import { IS_TRANSPARENT, LIGHT_EMISSION } from '../core/BlockTypes';
 import { chunkKey, parseKey } from './chunkKey';
 import type { Chunk } from '../core/Chunk';
@@ -118,8 +119,10 @@ export class LightEngine {
         const nz = n.z + d[2];
         if (ny < 0 || ny >= CY) continue;
         if (this.isOpaque(nx, ny, nz)) continue;
-        // Straight-down from a full-strength cell costs nothing (vertical sunlight).
-        const target = d[1] === -1 && level === 15 ? 15 : level - 1;
+        // Straight-down from a full-strength cell costs nothing (vertical sunbeam down
+        // a shaft). Every other step costs skySideCost so daylight dies a few blocks
+        // into caves instead of bleeding 15 (Phase 11.2; tunable "cave darkness").
+        const target = d[1] === -1 && level === 15 ? 15 : level - Tunables.skySideCost;
         if (target <= 0) continue;
         if (this.getSkyW(nx, ny, nz) < target) {
           if (this.setSkyW(nx, ny, nz, target)) q.push({ x: nx, y: ny, z: nz, v: target });
