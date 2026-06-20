@@ -163,24 +163,17 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const acc = NEEDS_BLEND.has(b) ? transparent : opaque;
         const waveFlag = IS_FOLIAGE[b] ? 1 : 0;
 
-        // Phase 6: variable-height water. h = this cell's top (1.0 for non-water,
-        // sources, falling, and any water with water directly above).
+        // Phase 11.1/11.4: sky light is absorbed passing DOWN through water, so deeper
+        // submerged surfaces get darker (real underwater falloff). Baked into the sky
+        // channel (vLight.x); block/torch light is unaffected. Computed PER FACE below
+        // from the neighbor cell the face looks into — that transparent cell is where
+        // the light comes from, so its water column is what attenuated it. (Per-cell
+        // would miss a dug hole's walls, which have solid above and would stay bright.)
         const isWater = b === Block.WATER;
         const selfFluid = isWater ? self.getFluid(lx, y, lz) : 0;
         const h = isWater
           ? fluidSurfaceHeight(b, selfFluid, blockAt(wx, y + 1, wz) === Block.WATER)
           : 1;
-
-        // Phase 11.1: sky light is absorbed passing DOWN through water, so deeper
-        // submerged surfaces get darker (real underwater falloff). Bake it into the
-        // sky channel (vLight.x); block/torch light is unaffected. Only walk when
-        // there's water directly above (dry caves cost nothing).
-        let skyAtten = 1;
-        if (blockAt(wx, y + 1, wz) === Block.WATER) {
-          let n = 0;
-          for (let yy = y + 1; yy < CY && n < 30 && blockAt(wx, yy, wz) === Block.WATER; yy++) n++;
-          skyAtten = Math.exp(-n * Tunables.waterAbsorb);
-        }
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
@@ -188,6 +181,15 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           const nby = y + face.n[1];
           const nbz = wz + face.n[2];
           const nbr = blockAt(nbx, nby, nbz);
+
+          // Water column above the cell the light enters through (the neighbor) -> the
+          // depth that absorbed this face's sky light. 0 (no walk) for dry faces.
+          let skyAtten = 1;
+          if (nbr === Block.WATER) {
+            let n = 0;
+            for (let yy = nby; yy < CY && n < 30 && blockAt(nbx, yy, nbz) === Block.WATER; yy++) n++;
+            skyAtten = Math.exp(-n * Tunables.waterAbsorb);
+          }
 
           // Decide visibility + vertical extent. Non-water keeps the original
           // cull rule (topH=1, botH=0 -> geometry unchanged). Water uses its top

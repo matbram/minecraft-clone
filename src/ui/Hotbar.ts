@@ -8,8 +8,8 @@ const DEFAULT_SLOTS: Block[] = [
   Block.DIRT,
   Block.STONE,
   Block.SAND,
+  Block.WATER, // slot 5: placeable source — flows + fills (LEAVES still in inventory)
   Block.LOG,
-  Block.LEAVES,
   Block.GLASS,
   Block.GLOWSTONE,
   Block.APPLE, // slot 9: an edible so survival's eat loop is reachable out of the box
