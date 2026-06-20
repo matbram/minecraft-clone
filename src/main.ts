@@ -12,6 +12,11 @@ import {
   LAYER_TRANSPARENT,
   UNDERWATER_FOG_COLOR,
   UNDERWATER_FOG_DENSITY,
+  UNDERWATER_DEEP_COLOR,
+  UNDERWATER_DEEP_FOG_DENSITY,
+  UNDERWATER_MAX_DEPTH,
+  UNDERWATER_PARTICLES,
+  WATER_SURFACE_Y,
   MAX_FLUID_OPS_PER_TICK,
   worldToChunk,
 } from './core/constants';
@@ -45,6 +50,7 @@ import { TextureRegistry } from './render/textures/TextureSource';
 import { ProceduralTextureSource } from './render/textures/ProceduralTextureSource';
 import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
 import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
+import { UnderwaterParticles } from './render/UnderwaterParticles';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -196,11 +202,14 @@ const shadowMapper = new ShadowMapper(materials.shared);
 const planarReflection = new PlanarReflection(materials.shared);
 const tmpSunUv = new THREE.Vector3();
 
-// Phase 5: underwater tint + fog override. Precompute both colorspaces so the
-// override matches DayNight's (linear when ACES/post is on).
+// Phase 5/7b: underwater tint + fog override + drifting motes. Precompute both
+// colorspaces (shallow + deep) so the override matches DayNight's (linear under ACES).
 const underwaterOverlay = new UnderwaterOverlay(document.getElementById('underwater-tint')!);
+const underwaterParticles = new UnderwaterParticles(scene, UNDERWATER_PARTICLES);
 const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
+const uwDeepColorSRGB = new THREE.Color(UNDERWATER_DEEP_COLOR);
+const uwDeepColorLinear = uwDeepColorSRGB.clone().convertSRGBToLinear();
 
 function applyPreset(p: Preset): void {
   settings = PRESETS[p];
@@ -352,20 +361,30 @@ function frame(now: number): void {
   materials.shared.uFogDensity.value = dayNight.fogDensity;
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
 
-  // Underwater (Phase 5): when the eye is in a water block, override the shared
-  // fog (DayNight rewrote it just above, so this auto-clears on surfacing) and
-  // fade in the tint overlay. Reflections are already disabled below the surface.
+  // Underwater (Phase 5/7b): when the eye is in a water block, override the shared
+  // fog (DayNight rewrote it just above, so this auto-clears on surfacing), ramp
+  // color/density by how deep the eye is, drive the in-shader absorption/caustics,
+  // and fade in the tint overlay + post wobble. Reflections are disabled below.
   const submerged =
     world.getBlockWorld(
       Math.floor(camera.position.x),
       Math.floor(camera.position.y),
       Math.floor(camera.position.z),
     ) === Block.WATER;
+  let uwDepth = 0;
   if (submerged) {
-    materials.shared.uFogColor.value.copy(settings.usePost ? uwFogColorLinear : uwFogColorSRGB);
-    materials.shared.uFogDensity.value = UNDERWATER_FOG_DENSITY;
+    uwDepth = Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_MAX_DEPTH, 0), 1);
+    const shallow = settings.usePost ? uwFogColorLinear : uwFogColorSRGB;
+    const deep = settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB;
+    materials.shared.uFogColor.value.copy(shallow).lerp(deep, uwDepth);
+    materials.shared.uFogDensity.value =
+      UNDERWATER_FOG_DENSITY + (UNDERWATER_DEEP_FOG_DENSITY - UNDERWATER_FOG_DENSITY) * uwDepth;
   }
+  materials.shared.uUnderwater.value = submerged ? 1 : 0;
+  materials.shared.uUnderwaterDepth.value = uwDepth;
   underwaterOverlay.setActive(submerged);
+  composer.setUnderwater(submerged ? 1 : 0, now / 1000);
+  underwaterParticles.update(frameDt, camera.position, submerged);
 
   chunkManager.update(frameDt, player.pos);
 

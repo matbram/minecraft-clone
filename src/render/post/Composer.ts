@@ -13,6 +13,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { createGodRaysPass } from './GodRaysPass';
+import { createUnderwaterPass } from './UnderwaterPass';
 import { BLOOM_THRESHOLD, BLOOM_STRENGTH, BLOOM_RADIUS, TONE_EXPOSURE } from '../../core/constants';
 import type { QualitySettings } from '../Quality';
 
@@ -45,6 +46,7 @@ export class Composer {
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly godrays: ShaderPass;
+  private readonly underwater: ShaderPass;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -56,6 +58,11 @@ export class Composer {
     const h = window.innerHeight;
     this.composer = new EffectComposer(renderer);
     this.composer.addPass(new RenderPass(scene, camera));
+
+    // Underwater warp first so bloom/god-rays act on the distorted image.
+    this.underwater = createUnderwaterPass();
+    this.underwater.enabled = false;
+    this.composer.addPass(this.underwater);
 
     this.bloom = new UnrealBloomPass(new THREE.Vector2(w, h), BLOOM_STRENGTH, BLOOM_RADIUS, BLOOM_THRESHOLD);
     this.composer.addPass(this.bloom);
@@ -77,6 +84,13 @@ export class Composer {
   updateGodRays(sunUv: THREE.Vector3, visible: boolean): void {
     (this.godrays.uniforms.uSunUv.value as THREE.Vector2).set(sunUv.x, sunUv.y);
     this.godrays.uniforms.uVisible.value = visible ? 1 : 0;
+  }
+
+  // Per-frame underwater distortion strength (0 = off/passthrough).
+  setUnderwater(strength: number, time: number): void {
+    this.underwater.enabled = strength > 0;
+    this.underwater.uniforms.uStrength.value = strength;
+    this.underwater.uniforms.uTime.value = time;
   }
 
   setSize(w: number, h: number, pixelRatio: number): void {

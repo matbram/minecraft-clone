@@ -30,6 +30,9 @@ export interface Materials {
     uMoonFactor: { value: number };
     uNightAmbient: { value: number };
     uShadowDir: { value: THREE.Vector3 };
+    // Phase 7b — underwater: 1 when the eye is submerged; depth 0..1 below surface.
+    uUnderwater: { value: number };
+    uUnderwaterDepth: { value: number };
     uWind: { value: number };
     uWindSpeed: { value: number };
     // Phase 4b — sun shadows (Cinematic; uShadowStrength=0 disables + early-outs).
@@ -58,6 +61,8 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uMoonFactor: { value: 0 },
     uNightAmbient: { value: 0 },
     uShadowDir: { value: new THREE.Vector3(0, 1, 0) },
+    uUnderwater: { value: 0 },
+    uUnderwaterDepth: { value: 0 },
     uWind: { value: WIND_STRENGTH },
     uWindSpeed: { value: WIND_SPEED },
     uShadowMap0: { value: null as THREE.Texture | null },
