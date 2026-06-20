@@ -56,4 +56,9 @@ export class Stars {
     this.enabled = v;
     if (!v) this.points.visible = false;
   }
+
+  // Phase 10 — underwater: stars fade with depth (call AFTER update()).
+  setUnderwaterFade(fade: number): void {
+    this.mat.opacity *= 1 - fade;
+  }
 }

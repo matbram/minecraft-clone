@@ -20,6 +20,8 @@ export class Sky {
         uSunDir: { value: new THREE.Vector3(0, 1, 0) },
         uSunColor: { value: new THREE.Color(0xffd9a0) },
         uSunGlow: { value: 0 },
+        uWaterColor: { value: new THREE.Color(0x0a2230) },
+        uWaterFade: { value: 0 },
       },
       vertexShader: vert,
       fragmentShader: frag,
@@ -43,13 +45,12 @@ export class Sky {
     this.mat.uniforms.uSunGlow.value = day.sunGlow;
   }
 
-  // Phase 8b — override the gradient (used to turn the dome into a water backdrop
-  // while submerged). Call AFTER update(); sun-glow is left untouched (it reads ~0
-  // underwater since the override colors dominate). Pass via main each frame.
-  overrideColors(zenith: THREE.Color, horizon: THREE.Color): void {
-    (this.mat.uniforms.uZenith.value as THREE.Color).copy(zenith);
-    (this.mat.uniforms.uHorizon.value as THREE.Color).copy(horizon);
-    this.mat.uniforms.uSunGlow.value = 0;
+  // Phase 10 — underwater: fade the whole sky (incl. sun glow) toward the deep
+  // water color as the eye descends, so near the surface you still see the sky/sun
+  // and it goes dark with depth. fade=0 above water leaves the sky untouched.
+  setUnderwater(fade: number, color: THREE.Color): void {
+    this.mat.uniforms.uWaterFade.value = fade;
+    (this.mat.uniforms.uWaterColor.value as THREE.Color).copy(color);
   }
 
   setVisible(v: boolean): void {

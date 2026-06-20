@@ -165,6 +165,8 @@ export const UNDERWATER_DEEP_FOG_DENSITY = 0.16; // denser/darker the deeper you
 export const UNDERWATER_MAX_DEPTH = 32; // blocks below surface for full murk (gradual)
 export const CAUSTIC_STRENGTH = 0.22; // rippling-light highlight amount (less spotlighting)
 export const UNDERWATER_FILL = 0.18; // scattered near-surface ambient (daylight, fades w/ depth)
+export const UNDERWATER_LIGHT_DEPTH = 20; // blocks over which surface light (sky/sun/rays) fades
+export const UNDERWATER_RAY_BOOST = 2.0; // god-ray shaft strength multiplier while submerged
 export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
 
 // ---------------------------------------------------------------------------

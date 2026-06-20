@@ -13,9 +13,10 @@ import {
   UNDERWATER_FOG_COLOR,
   UNDERWATER_FOG_DENSITY,
   UNDERWATER_DEEP_COLOR,
-  UNDERWATER_SURFACE_COLOR,
   UNDERWATER_DEEP_FOG_DENSITY,
   UNDERWATER_MAX_DEPTH,
+  UNDERWATER_LIGHT_DEPTH,
+  UNDERWATER_RAY_BOOST,
   UNDERWATER_FILL,
   UNDERWATER_PARTICLES,
   WATER_SURFACE_Y,
@@ -212,8 +213,6 @@ const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
 const uwDeepColorSRGB = new THREE.Color(UNDERWATER_DEEP_COLOR);
 const uwDeepColorLinear = uwDeepColorSRGB.clone().convertSRGBToLinear();
-const uwSurfaceSRGB = new THREE.Color(UNDERWATER_SURFACE_COLOR);
-const uwSurfaceLinear = uwSurfaceSRGB.clone().convertSRGBToLinear();
 
 function applyPreset(p: Preset): void {
   settings = PRESETS[p];
@@ -352,8 +351,9 @@ function frame(now: number): void {
   interaction.updateAim(camera.position, tmpDir); // aim BEFORE view-bob so the crosshair is steady
   effects.update(frameDt, camera); // sets sprint FOV + applies view-bob to camera
 
-  // Underwater state (computed once; camera is final after view-bob). Hide the
-  // sky/celestial layers while submerged so stars/sky don't show through the water.
+  // Underwater state (computed once; camera is final after view-bob). Nothing is
+  // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the
+  // water with depth, so near the surface you see it and deep it fades to dark.
   const submerged =
     world.getBlockWorld(
       Math.floor(camera.position.x),
@@ -363,22 +363,22 @@ function frame(now: number): void {
   const uwDepth = submerged
     ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_MAX_DEPTH, 0), 1)
     : 0;
-  sunMoon.setVisible(settings.sun && !submerged);
-  clouds.setVisible(settings.clouds && !submerged);
-  stars.setVisible(settings.stars && !submerged);
+  const lightFade = submerged
+    ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_LIGHT_DEPTH, 0), 1)
+    : 0;
+  sunMoon.setVisible(settings.sun);
+  clouds.setVisible(settings.clouds);
+  stars.setVisible(settings.stars);
 
   sky.update(camera.position, dayNight);
   sunMoon.update(camera.position, dayNight);
   clouds.update(camera.position, dayNight, frameDt);
   stars.update(camera.position, dayNight);
-  if (submerged) {
-    // Turn the sky dome into a water backdrop: brighter teal up (toward the
-    // surface), deep dark down. Match DayNight's colorspace (linear under post).
-    sky.overrideColors(
-      settings.usePost ? uwSurfaceLinear : uwSurfaceSRGB,
-      settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
-    );
-  }
+  // Absorb the above-water visuals toward the deep water color as the eye descends.
+  sky.setUnderwater(lightFade, settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB);
+  sunMoon.setUnderwaterFade(lightFade);
+  stars.setUnderwaterFade(lightFade);
+  clouds.setUnderwaterFade(lightFade);
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;
@@ -420,10 +420,13 @@ function frame(now: number): void {
 
   if (settings.usePost) {
     if (settings.godRays) {
-      // Sun shafts by day; moon shafts underwater at night.
+      // Sun shafts by day; moon shafts underwater at night. Boosted near the
+      // surface so light rays read entering the water (weaken with depth as the
+      // sun/moon disc fades).
       let vis = dayNight.sunAboveHorizon && sunMoon.sunScreenPos(camera, tmpSunUv);
       if (!vis && submerged) vis = sunMoon.moonScreenPos(camera, tmpSunUv);
-      composer.updateGodRays(tmpSunUv, vis, 1 + dayNight.sunGlow * 2); // stronger shafts at low sun
+      const rayBoost = submerged ? UNDERWATER_RAY_BOOST : 1;
+      composer.updateGodRays(tmpSunUv, vis, (1 + dayNight.sunGlow * 2) * rayBoost);
     }
     composer.render();
   } else {

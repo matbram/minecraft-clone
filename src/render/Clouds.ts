@@ -68,4 +68,9 @@ export class Clouds {
   setVisible(v: boolean): void {
     this.mesh.visible = v;
   }
+
+  // Phase 10 — underwater: clouds fade with depth (call AFTER update()).
+  setUnderwaterFade(fade: number): void {
+    this.mat.opacity = 0.85 * (1 - fade);
+  }
 }

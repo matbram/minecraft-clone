@@ -139,4 +139,14 @@ export class SunMoon {
       this.moonGlow.visible = false;
     }
   }
+
+  // Phase 10 — underwater: dim the sun/moon with depth (light absorbed by water).
+  // Call AFTER update(); fade=0 leaves them at their normal opacity.
+  setUnderwaterFade(fade: number): void {
+    const k = 1 - fade;
+    this.sun.material.opacity *= k;
+    this.glow.material.opacity *= k;
+    this.moon.material.opacity *= k;
+    this.moonGlow.material.opacity *= k;
+  }
 }
