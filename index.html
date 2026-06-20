@@ -39,13 +39,51 @@
         text-shadow: 0 1px 2px rgba(0,0,0,0.8); white-space: pre; pointer-events: none;
         user-select: none;
       }
+
+      /* Hotbar */
+      #hotbar {
+        position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+        display: flex; gap: 4px; pointer-events: none; user-select: none;
+      }
+      .hotbar-slot {
+        position: relative; width: 48px; height: 48px;
+        background: rgba(0,0,0,0.35); border: 2px solid rgba(255,255,255,0.25);
+        border-radius: 4px; display: flex; align-items: center; justify-content: center;
+      }
+      .hotbar-slot.active { border-color: #fff; background: rgba(255,255,255,0.18); }
+      .hotbar-slot canvas { image-rendering: pixelated; width: 40px; height: 40px; }
+      .hotbar-num {
+        position: absolute; top: 1px; left: 3px; font: 10px/1 ui-monospace, monospace;
+        color: #fff; text-shadow: 0 1px 1px #000;
+      }
+
+      /* Inventory overlay */
+      #inventory {
+        position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+        background: rgba(0,0,0,0.55); z-index: 50; user-select: none;
+      }
+      .inv-panel {
+        background: #1a2733; border: 1px solid #34506a; border-radius: 12px;
+        padding: 18px 20px; max-width: 460px;
+      }
+      .inv-title { color: #dce9f7; font: 13px/1.4 system-ui, sans-serif; margin-bottom: 12px; }
+      .inv-grid { display: grid; grid-template-columns: repeat(6, 56px); gap: 6px; }
+      .inv-cell {
+        width: 56px; height: 56px; background: rgba(0,0,0,0.3);
+        border: 2px solid rgba(255,255,255,0.18); border-radius: 4px; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+      }
+      .inv-cell:hover { border-color: #fff; background: rgba(255,255,255,0.16); }
+      .inv-cell canvas { image-rendering: pixelated; width: 48px; height: 48px; }
     </style>
   </head>
   <body>
     <div id="app"></div>
     <div id="crosshair"></div>
-    <div id="lock-hint">Click to look around<br /><small>WASD move · Space/Shift up·down · Esc release</small></div>
+    <div id="lock-hint">Click to play<br /><small>WASD move · Space jump · Ctrl sprint · Shift sneak<br />LMB break · RMB place · 1–9 select · E inventory · F fly · Esc release</small></div>
     <div id="hud"></div>
+    <div id="hotbar"></div>
+    <div id="inventory"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

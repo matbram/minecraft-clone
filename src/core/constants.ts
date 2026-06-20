@@ -39,3 +39,35 @@ export function worldToChunk(w: number): number {
 export function mod(n: number, m: number): number {
   return ((n % m) + m) % m;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1: physics + interaction. All physics values are applied ONCE per fixed
+// step (20 TPS) — there is no dt*20 "ticks" multiplier. Tune by feel.
+// ---------------------------------------------------------------------------
+export const FIXED_DT = 1 / 20; // 0.05s, 20 ticks/sec
+export const MAX_FRAME_DT = 0.25; // clamp frame delta -> no spiral of death
+export const MAX_SUBSTEPS = 5; // cap fixed steps simulated per frame
+
+export const PLAYER_HALF_WIDTH = 0.3; // hitbox half-extent in X/Z
+export const PLAYER_HEIGHT = 1.8; // feet -> head
+export const EYE_HEIGHT = 1.62; // camera offset above feet
+export const PLAYER_EPS = 1e-3; // flush-snap epsilon
+
+export const GRAVITY = 28; // blocks/s^2
+export const TERMINAL_VY = 55; // max fall speed (blocks/s)
+export const JUMP_VELOCITY = 9.2; // ~1.25 block jump (sampled) clears a 1-block ledge
+
+export const WALK_SPEED = 4.3; // target ground speed (blocks/s)
+export const SPRINT_MULT = 1.45;
+export const SNEAK_MULT = 0.35;
+export const GROUND_ACCEL = 40; // approach target velocity on ground
+export const AIR_ACCEL = 6; // weaker control mid-air
+export const GROUND_DRAG = 0.78; // horiz velocity retained per tick (no input, grounded)
+export const AIR_DRAG = 0.96;
+
+export const FLY_SPEED = 18; // noclip fly speed (blocks/s)
+export const FLY_SPRINT_MULT = 3;
+
+export const REACH = 5; // block interaction distance
+export const INSTANT_BREAK = false; // true = creative instant break
+export const BREAK_STAGES = 10; // crack overlay stages

@@ -167,7 +167,8 @@ PAINTERS[Tile.COAL_ORE] = paintOre({ r: 40, g: 40, b: 44 });
 PAINTERS[Tile.IRON_ORE] = paintOre({ r: 205, g: 170, b: 140 });
 PAINTERS[Tile.GOLD_ORE] = paintOre({ r: 235, g: 200, b: 90 });
 
-export function buildAtlas(): THREE.Texture {
+// Draw the structured atlas into a canvas (also used by UI for icon crops).
+export function buildAtlasCanvas(): HTMLCanvasElement {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;
   canvas.height = ATLAS_ROWS * TILE_PX;
@@ -183,7 +184,16 @@ export function buildAtlas(): THREE.Texture {
     const painter = PAINTERS[t] ?? fillFlat({ r: 255, g: 0, b: 255 }); // magenta = missing
     painter(ctx, x0, y0, mulberry32(0x1234 + t * 99991));
   }
+  return canvas;
+}
 
+export interface AtlasResult {
+  texture: THREE.Texture;
+  canvas: HTMLCanvasElement; // for cropping block icons in the UI
+}
+
+export function buildAtlas(): AtlasResult {
+  const canvas = buildAtlasCanvas();
   const tex = new THREE.CanvasTexture(canvas);
   tex.flipY = false; // match canvas top-left origin to UV (0,0)
   tex.magFilter = THREE.NearestFilter;
@@ -191,5 +201,5 @@ export function buildAtlas(): THREE.Texture {
   tex.generateMipmaps = false;
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.needsUpdate = true;
-  return tex;
+  return { texture: tex, canvas };
 }

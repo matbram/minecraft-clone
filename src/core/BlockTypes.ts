@@ -137,3 +137,54 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
 export function tileOf(block: Block, face: number): number {
   return TILE_INDEX[block * 6 + face];
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1: interaction tables.
+// ---------------------------------------------------------------------------
+
+// Mining time in SECONDS (Infinity = unbreakable). Tune by feel.
+export const HARDNESS = new Float32Array(BLOCK_COUNT);
+(function initHardness() {
+  HARDNESS.fill(0.75); // generic default
+  HARDNESS[Block.AIR] = 0;
+  HARDNESS[Block.WATER] = 0;
+  HARDNESS[Block.LEAVES] = 0.2;
+  HARDNESS[Block.GLASS] = 0.3;
+  HARDNESS[Block.SAND] = 0.5;
+  HARDNESS[Block.DIRT] = 0.6;
+  HARDNESS[Block.GRASS] = 0.6;
+  HARDNESS[Block.GRAVEL] = 0.6;
+  HARDNESS[Block.LOG] = 1.5;
+  HARDNESS[Block.STONE] = 2.0;
+  HARDNESS[Block.COAL_ORE] = 2.0;
+  HARDNESS[Block.IRON_ORE] = 2.0;
+  HARDNESS[Block.GOLD_ORE] = 2.0;
+  HARDNESS[Block.GLOWSTONE] = 2.0;
+  HARDNESS[Block.BEDROCK] = Infinity;
+})();
+
+// A block the player can target with the cursor (break / place-against).
+export function isSelectable(b: Block): boolean {
+  return b !== Block.AIR && b !== Block.WATER;
+}
+
+// Blocks the player can hold + place. Excludes AIR, WATER, BEDROCK.
+export const PLACEABLE: Block[] = [
+  Block.GRASS,
+  Block.DIRT,
+  Block.STONE,
+  Block.SAND,
+  Block.GLASS,
+  Block.LOG,
+  Block.LEAVES,
+  Block.GLOWSTONE,
+  Block.GRAVEL,
+  Block.COAL_ORE,
+  Block.IRON_ORE,
+  Block.GOLD_ORE,
+];
+
+// Representative atlas tile for a block's inventory/hotbar icon (its top face).
+export function representativeTile(b: Block): number {
+  return TILE_INDEX[b * 6 + FACE_PY];
+}

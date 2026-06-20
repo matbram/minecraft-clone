@@ -2,15 +2,28 @@
 // then run the throttled render loop.
 
 import * as THREE from 'three';
-import { DEFAULT_SEED } from './core/constants';
+import {
+  DEFAULT_SEED,
+  FIXED_DT,
+  MAX_FRAME_DT,
+  MAX_SUBSTEPS,
+  worldToChunk,
+} from './core/constants';
 import { surfaceHeight } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
 import { buildAtlas } from './render/atlas';
+import { buildCrackAtlas } from './render/crackAtlas';
 import { createMaterials } from './render/materials';
 import { ChunkRenderer } from './render/ChunkRenderer';
 import { ChunkManager } from './game/ChunkManager';
-import { FlyCamera } from './player/Camera';
+import { Input } from './player/Input';
+import { Player, PlayerMode } from './player/Player';
+import { BlockOutline } from './render/BlockOutline';
+import { BreakOverlay } from './render/BreakOverlay';
+import { Hotbar } from './ui/Hotbar';
+import { Inventory } from './ui/Inventory';
+import { Interaction } from './interaction/Interaction';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -111,7 +124,7 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 
 // --- assets + systems ------------------------------------------------------
 const atlas = buildAtlas();
-const materials = createMaterials(atlas, skyColor);
+const materials = createMaterials(atlas.texture, skyColor);
 
 const world = new World(seed);
 world.load();
@@ -120,20 +133,58 @@ const scheduler = new GenScheduler(seed);
 const chunkRenderer = new ChunkRenderer(scene, materials);
 const chunkManager = new ChunkManager(world, scheduler, chunkRenderer);
 
-const flyCam = new FlyCamera(camera, renderer.domElement);
+// --- player + interaction --------------------------------------------------
+const input = new Input(renderer.domElement);
 
-// Spawn comfortably above the terrain at the origin.
-const spawnX = 8;
-const spawnZ = 8;
-const spawnY = surfaceHeight(spawnX, spawnZ, seed) + 6;
-flyCam.setPosition(spawnX, spawnY, spawnZ);
-flyCam.pitch = -0.35;
+const spawnX = 8.5;
+const spawnZ = 8.5;
+const spawnY = surfaceHeight(Math.floor(spawnX), Math.floor(spawnZ), seed) + 2;
+const player = new Player(world, input, new THREE.Vector3(spawnX, spawnY, spawnZ));
+input.pitch = -0.2;
+
+const outline = new BlockOutline(scene);
+const breakOverlay = new BreakOverlay(scene, buildCrackAtlas());
+
+const hotbar = new Hotbar(document.getElementById('hotbar')!, atlas.canvas);
+const inventory = new Inventory(document.getElementById('inventory')!, atlas.canvas, hotbar);
+const interaction = new Interaction(world, input, player, hotbar, outline, breakOverlay);
 
 // --- UI glue ---------------------------------------------------------------
 const lockHint = document.getElementById('lock-hint')!;
-flyCam.onLockChange = (locked) => {
-  lockHint.classList.toggle('hidden', locked);
+input.onLockChange = (locked) => {
+  lockHint.classList.toggle('hidden', locked || inventory.open);
+  if (locked && inventory.open) inventory.close(); // clicking back into the game closes inventory
 };
+inventory.onOpen = () => {
+  input.releaseLock();
+  interaction.setPaused(true);
+  lockHint.classList.add('hidden');
+};
+inventory.onClose = () => {
+  interaction.setPaused(false);
+  // Pointer is still unlocked after closing; prompt the user to click back in.
+  if (!input.locked) lockHint.classList.remove('hidden');
+};
+
+input.onWheel = (dir) => hotbar.cycle(dir);
+input.onMouseDown = (button) => {
+  if (button === 2) interaction.tryPlace();
+};
+input.onKeyPress = (code) => {
+  if (code === 'KeyE') {
+    inventory.toggle();
+    return;
+  }
+  if (code === 'KeyF') {
+    player.toggleMode();
+    return;
+  }
+  if (code.startsWith('Digit')) {
+    const n = Number(code.slice(5));
+    if (n >= 1 && n <= 9) hotbar.select(n - 1);
+  }
+};
+
 const hud = document.getElementById('hud')!;
 
 // --- resize ----------------------------------------------------------------
@@ -154,28 +205,55 @@ window.addEventListener('beforeunload', () => {
 let last = performance.now();
 let fpsSmooth = 60;
 let hudAccum = 0;
+let accumulator = 0;
+let physicsStarted = false; // hold physics until the spawn chunk exists
+const tmpDir = new THREE.Vector3();
+
+function spawnChunkReady(): boolean {
+  return !!world.getChunk(worldToChunk(player.pos.x), worldToChunk(player.pos.z));
+}
 
 function frame(now: number): void {
-  const dt = Math.min((now - last) / 1000, 0.1);
+  let frameDt = (now - last) / 1000;
   last = now;
+  if (frameDt > MAX_FRAME_DT) frameDt = MAX_FRAME_DT; // clamp -> no spiral of death
 
-  flyCam.update(dt);
-  chunkManager.update(dt, camera.position);
+  if (!physicsStarted && spawnChunkReady()) physicsStarted = true;
+
+  // Fixed-timestep simulation (20 TPS).
+  if (physicsStarted) {
+    accumulator += frameDt;
+    let steps = 0;
+    while (accumulator >= FIXED_DT && steps < MAX_SUBSTEPS) {
+      player.prevPos.copy(player.pos);
+      player.tick(FIXED_DT);
+      interaction.tick(FIXED_DT);
+      accumulator -= FIXED_DT;
+      steps++;
+    }
+    if (steps === MAX_SUBSTEPS) accumulator = 0; // drop backlog after a stall
+  }
+
+  // Per-frame (responsive): camera, aim, streaming, render.
+  const alpha = physicsStarted ? accumulator / FIXED_DT : 0;
+  player.applyToCamera(camera, alpha);
+  camera.getWorldDirection(tmpDir);
+  interaction.updateAim(camera.position, tmpDir);
+  chunkManager.update(frameDt, player.pos);
 
   materials.shared.uTime.value = now / 1000;
-
   renderer.render(scene, camera);
 
   // HUD (throttled to ~5 Hz).
-  if (dt > 0) fpsSmooth = fpsSmooth * 0.9 + (1 / dt) * 0.1;
-  hudAccum += dt;
+  if (frameDt > 0) fpsSmooth = fpsSmooth * 0.9 + (1 / frameDt) * 0.1;
+  hudAccum += frameDt;
   if (hudAccum > 0.2) {
     hudAccum = 0;
-    const p = camera.position;
+    const p = player.pos;
     hud.textContent =
       `fps ${fpsSmooth.toFixed(0)}\n` +
       `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
-      `chunk ${Math.floor(p.x / 16)}, ${Math.floor(p.z / 16)}\n` +
+      `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}\n` +
       `loaded ${chunkManager.loadedCount}  meshQ ${chunkManager.meshQueueLength}\n` +
       `seed ${seed}  workers ${scheduler.poolSize}`;
   }
