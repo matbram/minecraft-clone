@@ -40,15 +40,17 @@ export class Particles {
     scene.add(this.points);
   }
 
-  burst(x: number, y: number, z: number, color: THREE.Color, count = 10): void {
+  // `bright` (0..1) tints the puff by the world light where the block broke, so
+  // particles don't glow at full color in the dark.
+  burst(x: number, y: number, z: number, color: THREE.Color, count = 10, bright = 1): void {
     for (let i = 0; i < count && this.count < MAX; i++) {
       const idx = this.count++;
       this.pos[idx * 3] = x;
       this.pos[idx * 3 + 1] = y;
       this.pos[idx * 3 + 2] = z;
-      this.col[idx * 3] = color.r;
-      this.col[idx * 3 + 1] = color.g;
-      this.col[idx * 3 + 2] = color.b;
+      this.col[idx * 3] = color.r * bright;
+      this.col[idx * 3 + 1] = color.g * bright;
+      this.col[idx * 3 + 2] = color.b * bright;
       this.vx[idx] = (Math.random() - 0.5) * 4;
       this.vy[idx] = 1.5 + Math.random() * 1.5;
       this.vz[idx] = (Math.random() - 0.5) * 4;

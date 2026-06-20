@@ -8,7 +8,7 @@
 //   attribute: (skyLight 0..1, blockLight 0..1, ao 0..1). The shader combines
 //   them as max(block, sky*day)*ao.
 
-import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
+import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL, WATER_LIGHT_ABSORB } from '../core/constants';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import { fluidSurfaceHeight } from '../core/fluid';
 import type { Chunk } from '../core/Chunk';
@@ -170,6 +170,17 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           ? fluidSurfaceHeight(b, selfFluid, blockAt(wx, y + 1, wz) === Block.WATER)
           : 1;
 
+        // Phase 11.1: sky light is absorbed passing DOWN through water, so deeper
+        // submerged surfaces get darker (real underwater falloff). Bake it into the
+        // sky channel (vLight.x); block/torch light is unaffected. Only walk when
+        // there's water directly above (dry caves cost nothing).
+        let skyAtten = 1;
+        if (blockAt(wx, y + 1, wz) === Block.WATER) {
+          let n = 0;
+          for (let yy = y + 1; yy < CY && n < 30 && blockAt(wx, yy, wz) === Block.WATER; yy++) n++;
+          skyAtten = Math.exp(-n * WATER_LIGHT_ABSORB);
+        }
+
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
           const nbx = wx + face.n[0];
@@ -272,7 +283,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const vy = vert[1] === 1 ? topH : botH;
             acc.positions.push(lx + vert[0], y + vy, lz + vert[2]);
             acc.normals.push(face.n[0], face.n[1], face.n[2]);
-            acc.light.push(sky, blk, ao);
+            acc.light.push(sky * skyAtten, blk, ao);
             const cu = face.uv[i][0];
             const cv = face.uv[i][1];
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));

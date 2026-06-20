@@ -347,7 +347,10 @@ function frame(now: number): void {
   player.applyToCamera(camera, alpha);
   camera.getWorldDirection(tmpDir);
   interaction.updateAim(camera.position, tmpDir); // aim BEFORE view-bob so the crosshair is steady
-  effects.update(frameDt, camera); // sets sprint FOV + applies view-bob to camera
+  // Sky-light multiplier for tinting world FX (so dropped items / particles / motes
+  // match the real light and don't glow in the dark). Mirrors the shader's sky term.
+  const fxSkyMul = Math.max(dayNight.dayFactor, dayNight.moonFactor, dayNight.nightAmbient);
+  effects.update(frameDt, camera, fxSkyMul); // sets sprint FOV + applies view-bob to camera
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the
@@ -410,7 +413,7 @@ function frame(now: number): void {
   // Blue veil: deeper = stronger, but scaled by the real light so it dims at night.
   underwaterOverlay.setIntensity(submerged ? (0.35 + 0.45 * uwDepth) * uwLight : 0);
   composer.setUnderwater(submerged ? 0.12 + 0.88 * uwDepth : 0, now / 1000);
-  underwaterParticles.update(frameDt, camera.position, submerged);
+  underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
   chunkManager.update(frameDt, player.pos);
 

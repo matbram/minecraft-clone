@@ -32,6 +32,7 @@ export class Effects {
   private readonly fallbackColor = new THREE.Color(0x888888);
   private stepAccum = 0;
   private ambienceStarted = false;
+  private lightMul = 1; // current sky-light multiplier (day/night) for tinting FX
 
   constructor(scene: THREE.Scene, world: World, input: Input, player: Player, atlas: AtlasResult) {
     this.world = world;
@@ -56,7 +57,8 @@ export class Effects {
 
   onBreak(block: Block, x: number, y: number, z: number): void {
     this.sfx.playBreak(block);
-    this.particles.burst(x + 0.5, y + 0.5, z + 0.5, this.tileColors[block] ?? this.fallbackColor, 10);
+    const b = this.world.brightnessAt(x, y, z, this.lightMul);
+    this.particles.burst(x + 0.5, y + 0.5, z + 0.5, this.tileColors[block] ?? this.fallbackColor, 10, b);
     this.drops.spawn(block, x + 0.5, y + 0.5, z + 0.5);
   }
 
@@ -64,12 +66,13 @@ export class Effects {
     this.sfx.playPlace(block);
   }
 
-  update(dt: number, camera: THREE.PerspectiveCamera): void {
+  update(dt: number, camera: THREE.PerspectiveCamera, lightMul: number): void {
     const p = this.player;
+    this.lightMul = lightMul;
     this.particles.update(dt);
 
     this.eye.set(p.pos.x, p.pos.y + EYE_HEIGHT, p.pos.z);
-    this.drops.update(dt, this.eye, () => this.sfx.playPickup());
+    this.drops.update(dt, this.eye, () => this.sfx.playPickup(), lightMul);
 
     // Footsteps tied to distance traveled (not frames/ticks).
     const hspeed = Math.hypot(p.vel.x, p.vel.z);

@@ -63,6 +63,20 @@ export class World {
     return chunk.getBlock(mod(wx, CX), wy, mod(wz, CZ));
   }
 
+  // Effective baked-light brightness 0..1 at a cell, for tinting world FX (dropped
+  // items, particles, motes) so they don't glow in the dark: max(blockLight,
+  // skyLight * skyMul). No fake floor — pitch black where there's no real light.
+  brightnessAt(wx: number, wy: number, wz: number, skyMul: number): number {
+    if (wy >= CY) return skyMul; // open sky above the world
+    if (wy < 0) return 0;
+    const chunk = this.getChunk(worldToChunk(wx), worldToChunk(wz));
+    if (!chunk) return 0;
+    const i = idx(mod(wx, CX), wy, mod(wz, CZ));
+    const sky = chunk.getSky(i) / 15;
+    const block = chunk.getBlockLight(i) / 15;
+    return Math.max(block, sky * skyMul);
+  }
+
   getFluidWorld(wx: number, wy: number, wz: number): number {
     if (wy < 0 || wy >= CY) return 0;
     const chunk = this.getChunk(worldToChunk(wx), worldToChunk(wz));

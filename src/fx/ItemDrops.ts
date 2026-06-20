@@ -43,7 +43,9 @@ export class ItemDrops {
     this.mat = new THREE.MeshBasicMaterial({ map: atlasTexture });
     this.placeholder = new THREE.BoxGeometry(SIZE, SIZE, SIZE);
     for (let i = 0; i < MAX; i++) {
-      const mesh = new THREE.Mesh(this.placeholder, this.mat);
+      // Per-drop material clone (shares the atlas texture) so each can be tinted by
+      // the world light at its position — a dropped block goes dark in a dark cave.
+      const mesh = new THREE.Mesh(this.placeholder, this.mat.clone());
       mesh.visible = false;
       mesh.frustumCulled = false;
       scene.add(mesh);
@@ -97,7 +99,7 @@ export class ItemDrops {
     slot.mesh.visible = true;
   }
 
-  update(dt: number, playerEye: THREE.Vector3, onPickup: () => void): void {
+  update(dt: number, playerEye: THREE.Vector3, onPickup: () => void, lightMul: number): void {
     for (const s of this.slots) {
       if (!s.active) continue;
       s.age += dt;
@@ -142,6 +144,14 @@ export class ItemDrops {
 
       s.mesh.position.set(s.pos.x, s.pos.y + Math.sin(s.age * BOB_FREQ) * BOB_AMP, s.pos.z);
       s.mesh.rotation.y += SPIN * dt;
+      // Tint by the baked light where the item sits, so it isn't full-bright in dark.
+      const b = this.world.brightnessAt(
+        Math.floor(s.pos.x),
+        Math.floor(s.pos.y),
+        Math.floor(s.pos.z),
+        lightMul,
+      );
+      (s.mesh.material as THREE.MeshBasicMaterial).color.setScalar(b);
     }
   }
 }
