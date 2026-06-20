@@ -26,27 +26,38 @@ const fragmentShader = /* glsl */ `
   uniform vec3 uCamPos, uSurfaceColor, uDeepColor;
   uniform float uTime, uFade;
 
+  // Two octaves of drifting waves + a sharper glint band so it reads as a moving
+  // water surface, not a flat tint.
   float ripple(vec2 p) {
-    return sin(p.x * 0.55 + uTime * 1.3)
-         + sin(p.y * 0.48 - uTime * 1.1)
-         + sin((p.x + p.y) * 0.33 + uTime * 0.7);
+    float w = sin(p.x * 0.55 + uTime * 1.3)
+            + sin(p.y * 0.48 - uTime * 1.1)
+            + sin((p.x + p.y) * 0.33 + uTime * 0.7);
+    w += 0.5 * (sin(p.x * 1.7 - uTime * 2.1) + sin(p.y * 1.9 + uTime * 1.7));
+    return w;
   }
 
   void main() {
     vec3 v = normalize(vWorldPos - uCamPos);
-    float up = clamp(v.y, 0.0, 1.0);             // how much we look UP at this point
-    float win = smoothstep(0.62, 0.92, up);       // inside the Snell refraction cone
-    float r = ripple(vWorldPos.xz) * 0.16;        // living surface shimmer
+    float up = clamp(v.y, 0.0, 1.0);              // how much we look UP at this point
+    float win = smoothstep(0.60, 0.95, up);        // inside the Snell refraction cone
+    float rw = ripple(vWorldPos.xz);
+    float r = rw * 0.12;                            // gentle brightness wobble
+    float glint = smoothstep(2.2, 3.2, rw) * (1.0 - win); // bright crests on the mirror
 
-    // Sheet: deep-mirror teal at grazing -> lit surface colour straight up; the
-    // window brightens toward white (the compressed sky punching through).
-    vec3 sheet = mix(uDeepColor * 1.3, uSurfaceColor, 0.35 + 0.65 * win);
-    vec3 col = mix(sheet, vec3(1.0), win * 0.55) * (1.0 + r);
+    // Sheet: a believable mid water-surface teal on the mirror (total internal
+    // reflection of the murk below), brightening toward the lit surface colour and
+    // then near-white inside the window (the compressed sky punching through).
+    vec3 mirror = mix(uDeepColor * 1.8, uSurfaceColor, 0.5);
+    vec3 sheet = mix(mirror, uSurfaceColor, win);
+    vec3 col = mix(sheet, vec3(1.0), win * 0.7) * (1.0 + r) + glint * 0.5;
+    col *= (0.45 + 0.55 * uFade);                   // dim in low light, but still present
 
-    // Opaque mirror at grazing, more transparent in the window so the sky shows.
+    // Near-opaque mirror everywhere you're NOT looking up the cone; the window stays
+    // see-through so the bright sky shows only there. Presence clamped so dim light
+    // still reads as a surface instead of vanishing.
     float dist = length(vWorldPos.xz - uCamPos.xz);
-    float distFade = smoothstep(700.0, 120.0, dist);
-    float alpha = mix(0.9, 0.28, win) * (0.92 + 0.08 * r) * distFade * uFade;
+    float distFade = smoothstep(900.0, 60.0, dist);
+    float alpha = mix(0.96, 0.22, win) * distFade * clamp(uFade * 2.0, 0.25, 1.0);
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;
@@ -80,8 +91,8 @@ export class WaterCeiling {
   }
 
   // Place the sheet at the local surface height above the camera and shade it. `fade`
-  // (0..1) is the overall strength = how lit it is here (dims deep / in caves / at
-  // night); <= 0 hides it. `surfaceY` should be above the camera (caller guarantees).
+  // (0..1) is the light at the SURFACE (≈full sky in open water, ≈0 in a sealed cave,
+  // dimmed gently with depth); <= 0 hides it. `surfaceY` must be above the camera.
   update(
     camPos: THREE.Vector3,
     surfaceY: number,

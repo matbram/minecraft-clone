@@ -607,15 +607,19 @@ function frame(now: number): void {
     if (surfaceY - camera.position.y < 0.6) {
       waterline = Math.min(1, Math.max(0, 0.5 - input.pitch * 0.7));
     }
-    // Phase 11.5b: the visible water surface from below — a rippling ceiling at the
-    // local surface, scaled by the light actually here (so it dims with depth / in
-    // caves / at night, like the rest of the underwater stack). This is the real fix
-    // for "no surface"; it supersedes the old screen-space Snell wash.
+    // Phase 11.5b/c: the visible water surface from below — a rippling ceiling at the
+    // local surface. Brightness comes from the light at the SURFACE (≈ full sky in open
+    // water, ≈0 in a sealed cave), NOT the doubly-absorbed light at the eye — so it
+    // stays clearly visible while swimming and still dims gently with depth / at night.
+    const sx = Math.floor(camera.position.x);
+    const sz = Math.floor(camera.position.z);
+    const surfaceLight = world.brightnessAt(sx, surfaceY, sz, fxSkyMul);
+    const ceilFade = surfaceLight * (1 - 0.45 * depthFrac);
     waterCeiling.update(
       camera.position,
       surfaceY,
       now / 1000,
-      Math.min(1, uwBright * 1.2),
+      ceilFade,
       settings.usePost ? uwFogColorLinear : uwFogColorSRGB,
       settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
     );
