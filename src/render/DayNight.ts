@@ -8,6 +8,8 @@ import {
   DAY_START_PHASE,
   FOG_DENSITY_DAY,
   FOG_DENSITY_NIGHT,
+  MOON_LIGHT_STRENGTH,
+  NIGHT_AMBIENT,
 } from '../core/constants';
 
 interface Stop {
@@ -18,13 +20,17 @@ interface Stop {
 }
 
 // Sky color keyframes by sun elevation (sRGB hexes). Day horizon == the original
-// flat sky color (0x8fc6f0) so noon matches the previous look.
+// flat sky color (0x8fc6f0) so noon matches the previous look. Phase 7a widened
+// the twilight band (extra stops around the horizon) so dawn/dusk linger as a
+// gradual gradient instead of flashing past in seconds.
 const STOPS: Stop[] = [
   { e: -1.0, zen: 0x05060f, hor: 0x0b1024, warm: 0x1a2b4d },
-  { e: -0.06, zen: 0x121a3a, hor: 0x3a2a4a, warm: 0x5a3a5a },
-  { e: 0.0, zen: 0x2a3a6b, hor: 0xe9956b, warm: 0xff8a3d },
-  { e: 0.18, zen: 0x456fc0, hor: 0xbcd8e8, warm: 0xffd9a0 },
-  { e: 0.5, zen: 0x3a7bd5, hor: 0x8fc6f0, warm: 0xfff4d6 },
+  { e: -0.15, zen: 0x0f1630, hor: 0x2a2340, warm: 0x4a3050 },
+  { e: -0.06, zen: 0x1a2348, hor: 0x6b3a4a, warm: 0x9a4a45 },
+  { e: 0.02, zen: 0x2a3a6b, hor: 0xe9956b, warm: 0xff8a3d },
+  { e: 0.12, zen: 0x3a5aa0, hor: 0xf0b080, warm: 0xffc890 },
+  { e: 0.3, zen: 0x456fc0, hor: 0xbcd8e8, warm: 0xffe9c0 },
+  { e: 0.55, zen: 0x3a7bd5, hor: 0x8fc6f0, warm: 0xfff4d6 },
   { e: 1.0, zen: 0x3a7bd5, hor: 0x8fc6f0, warm: 0xfff4d6 },
 ];
 
@@ -44,7 +50,9 @@ export class DayNight {
   readonly horizon = new THREE.Color();
   readonly fogColor = new THREE.Color();
   readonly cloudTint = new THREE.Color();
-  dayFactor = 1;
+  dayFactor = 1; // pure 0..1 day directional sky light (no night floor)
+  moonFactor = 0; // directional moonlight at night (0 by day)
+  nightAmbient = 0; // faint unshadowed skyglow floor at night
   starOpacity = 0;
   fogDensity = FOG_DENSITY_DAY;
   sunAboveHorizon = true;
@@ -96,12 +104,18 @@ export class DayNight {
     const warm = this.cloudTint; // reuse as scratch for warm
     this.sampleStops(e, 'warm', warm);
 
-    // Sun-tinted haze: fog leans warm only near the horizon (dawn/dusk).
-    const tint = Math.max(0, Math.min(0.5, 1 - Math.abs(e) * 4));
+    // Sun-tinted haze: fog leans warm near the horizon (dawn/dusk). Widened so
+    // the warm cast lingers through a gradual twilight.
+    const tint = Math.max(0, Math.min(0.5, 1 - Math.abs(e) * 2.2));
     this.fogColor.copy(this.horizon).lerp(warm, tint);
 
-    this.dayFactor = Math.max(smoothstep(-0.1, 0.18, e), 0.12);
-    this.starOpacity = 1 - smoothstep(-0.05, 0.15, e);
+    // Pure day directional factor (no floor) over a wide twilight band. The night
+    // floor moved to nightAmbient so moon shadows can darken below it.
+    this.dayFactor = smoothstep(-0.22, 0.3, e);
+    // Moon rides opposite the sun; moonFactor is "moon up" (== night) by construction.
+    this.moonFactor = MOON_LIGHT_STRENGTH * smoothstep(-0.04, 0.12, this.moonDir.y);
+    this.nightAmbient = NIGHT_AMBIENT * (1 - this.dayFactor);
+    this.starOpacity = 1 - smoothstep(-0.16, 0.16, e);
     this.fogDensity = FOG_DENSITY_NIGHT + (FOG_DENSITY_DAY - FOG_DENSITY_NIGHT) * this.dayFactor;
 
     // Cloud tint: between horizon and white, dimmed at night.

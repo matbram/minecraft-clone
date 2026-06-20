@@ -9,6 +9,11 @@ uniform float uAmbient; // floor so caves are dark but not pure black
 uniform vec3 uSunDir;
 uniform float uTime;
 
+// Phase 7a — moonlight.
+uniform float uMoonFactor;   // directional moon sky-light at night (0 by day)
+uniform float uNightAmbient; // faint unshadowed night skyglow floor
+uniform vec3 uShadowDir;     // active shadow light (sun by day / moon by night)
+
 // Phase 4b — sun shadows (2-split cascade). uShadowStrength == 0 -> disabled.
 uniform sampler2D uShadowMap0;
 uniform sampler2D uShadowMap1;
@@ -47,10 +52,10 @@ float inBox(vec3 c) {
   return (c.x > 0.0 && c.x < 1.0 && c.y > 0.0 && c.y < 1.0 && c.z < 1.0) ? 1.0 : 0.0;
 }
 
-float sunShadow() {
+float lightShadow() {
   if (uShadowStrength <= 0.0) return 1.0;
   vec3 n = normalize(vWorldNormal);
-  float ndl = max(dot(n, uSunDir), 0.0);
+  float ndl = max(dot(n, uShadowDir), 0.0);
   float bias = clamp(SHADOW_BIAS * (1.0 + 2.0 * (1.0 - ndl)), SHADOW_BIAS, SHADOW_BIAS * 4.0);
 
   vec3 c0 = (uShadowMatrix0 * vec4(vWorldPos, 1.0)).xyz; // ortho -> w == 1
@@ -69,8 +74,8 @@ float sunShadow() {
     }
   }
 
-  // Fade out as the sun nears / drops below the horizon.
-  float elev = smoothstep(0.0, 0.16, uSunDir.y);
+  // Fade out as the active light nears / drops below the horizon.
+  float elev = smoothstep(0.0, 0.16, uShadowDir.y);
   return mix(1.0, vis, uShadowStrength * elev);
 }
 
@@ -78,13 +83,21 @@ void main() {
   vec4 tex = texture2D(uAtlas, vUv);
   if (tex.a < uAlphaTest) discard;
 
-  float shadow = sunShadow();
-  float brightness = max(vLight.y, vLight.x * uDayFactor * shadow); // shadow dims SKY only
+  float shadow = lightShadow();
+  // Sun by day, moon by night — shadow dims whichever directional light is up;
+  // the night skyglow floor (uNightAmbient) stays unshadowed so shadows aren't black.
+  float dir = max(uDayFactor, uMoonFactor) * shadow;
+  float sky = vLight.x * max(dir, uNightAmbient);
+  float brightness = max(vLight.y, sky);
   brightness = max(brightness, uAmbient);                          // cave floor
   brightness *= vLight.z;                                          // ambient occlusion
 
   vec3 color = tex.rgb * brightness;
   float outA = tex.a;
+
+  // Cool moonlight cast at night (subtle; fades out by day).
+  float moonMix = clamp(uMoonFactor * 4.0, 0.0, 1.0) * (1.0 - uDayFactor) * 0.5;
+  color *= mix(vec3(1.0), vec3(0.702, 0.8, 1.0), moonMix);
 
   // Planar reflective water (top faces only; vReflect baked at mesh time).
   if (vReflect > 0.5 && uReflectStrength > 0.0) {

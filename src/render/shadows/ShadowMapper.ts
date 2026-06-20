@@ -14,6 +14,7 @@ import {
   SHADOW_CAM_DIST,
   SHADOW_DEPTH,
   SHADOW_STRENGTH,
+  MOON_SHADOW_STRENGTH,
   LAYER_SHADOW_CASTER,
 } from '../../core/constants';
 import type { Materials } from '../materials';
@@ -52,6 +53,8 @@ export class ShadowMapper {
   private readonly tmpVP = new THREE.Matrix4();
   private readonly origin = new THREE.Vector3();
   private readonly up = new THREE.Vector3();
+  private readonly lightDir = new THREE.Vector3();
+  private active = false;
 
   constructor(shared: Materials['shared']) {
     this.shared = shared;
@@ -72,20 +75,31 @@ export class ShadowMapper {
   // Bind/unbind the depth maps + strength. Unbound (null) on Low/Medium so an
   // un-rendered target is never left bound to the chunk material.
   setActive(active: boolean): void {
+    this.active = active;
     this.shared.uShadowMap0.value = active ? this.rt0.depthTexture : null;
     this.shared.uShadowMap1.value = active ? this.rt1.depthTexture : null;
     this.shared.uShadowStrength.value = active ? SHADOW_STRENGTH : 0;
   }
 
   render(renderer: THREE.WebGLRenderer, scene: THREE.Scene, center: THREE.Vector3, day: DayNight): void {
+    if (!this.active) return;
+
+    // Shadow-cast from whichever light is up. Sun and moon are exact opposites,
+    // so only one is meaningfully above the horizon; the in-shader horizon fade
+    // makes the dawn/dusk handoff fade to nothing (no pop).
+    const sunUp = day.sunAboveHorizon;
+    this.lightDir.copy(sunUp ? day.sunDir : day.moonDir);
+    this.shared.uShadowDir.value.copy(this.lightDir);
+    this.shared.uShadowStrength.value = sunUp ? SHADOW_STRENGTH : MOON_SHADOW_STRENGTH;
+
     const prevTarget = renderer.getRenderTarget();
     const prevOverride = scene.overrideMaterial;
     const prevAutoClear = renderer.autoClear;
     scene.overrideMaterial = this.depthMat;
     renderer.autoClear = true;
 
-    this.renderCascade(renderer, scene, center, day, this.cam0, this.rt0, SHADOW_CASCADE0, this.shared.uShadowMatrix0.value);
-    this.renderCascade(renderer, scene, center, day, this.cam1, this.rt1, SHADOW_CASCADE1, this.shared.uShadowMatrix1.value);
+    this.renderCascade(renderer, scene, center, this.lightDir, this.cam0, this.rt0, SHADOW_CASCADE0, this.shared.uShadowMatrix0.value);
+    this.renderCascade(renderer, scene, center, this.lightDir, this.cam1, this.rt1, SHADOW_CASCADE1, this.shared.uShadowMatrix1.value);
 
     scene.overrideMaterial = prevOverride;
     renderer.autoClear = prevAutoClear;
@@ -96,7 +110,7 @@ export class ShadowMapper {
     renderer: THREE.WebGLRenderer,
     scene: THREE.Scene,
     center: THREE.Vector3,
-    day: DayNight,
+    lightDir: THREE.Vector3,
     cam: THREE.OrthographicCamera,
     rt: THREE.WebGLRenderTarget,
     extent: number,
@@ -109,11 +123,11 @@ export class ShadowMapper {
     cam.near = 1;
     cam.far = SHADOW_DEPTH;
 
-    // Up vector: avoid degeneracy when the sun is straight overhead (noon).
+    // Up vector: avoid degeneracy when the light is straight overhead.
     this.up.set(0, 1, 0);
-    if (Math.abs(day.sunDir.y) > 0.95) this.up.set(0, 0, 1);
+    if (Math.abs(lightDir.y) > 0.95) this.up.set(0, 0, 1);
 
-    cam.position.copy(center).addScaledVector(day.sunDir, SHADOW_CAM_DIST);
+    cam.position.copy(center).addScaledVector(lightDir, SHADOW_CAM_DIST);
     cam.up.copy(this.up);
     cam.lookAt(center);
     cam.updateMatrixWorld(true);

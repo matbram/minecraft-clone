@@ -25,6 +25,11 @@ export interface Materials {
     uDayFactor: { value: number };
     uAmbient: { value: number };
     uSunDir: { value: THREE.Vector3 };
+    // Phase 7a — moonlight: directional moon sky-light, night skyglow floor, and
+    // the active shadow-casting light dir (sun by day / moon by night).
+    uMoonFactor: { value: number };
+    uNightAmbient: { value: number };
+    uShadowDir: { value: THREE.Vector3 };
     uWind: { value: number };
     uWindSpeed: { value: number };
     // Phase 4b — sun shadows (Cinematic; uShadowStrength=0 disables + early-outs).
@@ -50,6 +55,9 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uDayFactor: { value: DAY_FACTOR_DEFAULT },
     uAmbient: { value: LIGHT_AMBIENT },
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+    uMoonFactor: { value: 0 },
+    uNightAmbient: { value: 0 },
+    uShadowDir: { value: new THREE.Vector3(0, 1, 0) },
     uWind: { value: WIND_STRENGTH },
     uWindSpeed: { value: WIND_SPEED },
     uShadowMap0: { value: null as THREE.Texture | null },

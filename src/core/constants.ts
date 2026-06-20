@@ -86,7 +86,7 @@ export const AO_CURVE = [0.45, 0.65, 0.85, 1.0];
 // ---------------------------------------------------------------------------
 // Phase 4a: cinematic basics (day/night, post FX, presets).
 // ---------------------------------------------------------------------------
-export const DAY_CYCLE_SECONDS = 480; // full day/night cycle length
+export const DAY_CYCLE_SECONDS = 1200; // full day/night cycle (20 min; gradual twilight)
 export const DAY_START_PHASE = 0.3; // bright mid-morning on first load
 export const DAY_FF_MULT = 60; // hold-to-fast-forward multiplier
 
@@ -106,6 +106,13 @@ export const STAR_COUNT = 1400;
 
 export const FOG_DENSITY_DAY = 0.0145;
 export const FOG_DENSITY_NIGHT = 0.02;
+
+// Phase 7a: moonlight. Night directional light from the moon (= -sunDir), a faint
+// unshadowed skyglow floor (so moon shadows aren't pitch black), and a cool tint.
+export const MOON_LIGHT_STRENGTH = 0.22; // moonlit sky-light vs full day (1.0)
+export const MOON_SHADOW_STRENGTH = 0.35; // softer than the sun's SHADOW_STRENGTH
+export const NIGHT_AMBIENT = 0.1; // unshadowed night skyglow floor
+export const MOON_TINT = 0xb3ccff; // cool blue cast applied to moonlit surfaces
 
 export const RENDER_DISTANCE_LOW = 5;
 export const RENDER_DISTANCE_MED = 8; // == RENDER_DISTANCE (Medium holds 60fps)

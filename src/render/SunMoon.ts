@@ -25,6 +25,7 @@ export class SunMoon {
   private readonly sun: THREE.Sprite;
   private readonly glow: THREE.Sprite;
   private readonly moon: THREE.Sprite;
+  private readonly moonGlow: THREE.Sprite;
   private readonly worldPos = new THREE.Vector3();
   private readonly fwd = new THREE.Vector3();
   private readonly toSun = new THREE.Vector3();
@@ -46,6 +47,11 @@ export class SunMoon {
       [0.6, 'rgba(210,220,240,1)'],
       [1, 'rgba(200,210,235,0)'],
     ]);
+    const moonGlowTex = discTexture([
+      [0, 'rgba(190,210,255,0.5)'],
+      [0.35, 'rgba(150,180,245,0.18)'],
+      [1, 'rgba(120,160,235,0)'],
+    ]);
 
     this.glow = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: glowTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false }),
@@ -56,10 +62,14 @@ export class SunMoon {
     this.moon = new THREE.Sprite(
       new THREE.SpriteMaterial({ map: moonTex, transparent: true, depthTest: true, depthWrite: false }),
     );
+    this.moonGlow = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: moonGlowTex, transparent: true, blending: THREE.AdditiveBlending, depthTest: true, depthWrite: false }),
+    );
     this.glow.scale.setScalar(160);
     this.sun.scale.setScalar(50);
     this.moon.scale.setScalar(40);
-    for (const s of [this.glow, this.sun, this.moon]) {
+    this.moonGlow.scale.setScalar(95);
+    for (const s of [this.glow, this.sun, this.moonGlow, this.moon]) {
       // depthTest occludes them behind terrain; the sky dome doesn't write depth,
       // so they still show against the sky. renderOrder keeps them before water.
       s.renderOrder = -1;
@@ -71,6 +81,7 @@ export class SunMoon {
     this.sun.position.copy(camPos).addScaledVector(day.sunDir, DIST);
     this.glow.position.copy(this.sun.position);
     this.moon.position.copy(camPos).addScaledVector(day.moonDir, DIST);
+    this.moonGlow.position.copy(this.moon.position);
 
     // Fade out right at the horizon so a sub-horizon sun/moon doesn't linger.
     const sunUp = THREE.MathUtils.clamp(day.sunDir.y * 6 + 0.1, 0, 1);
@@ -78,9 +89,11 @@ export class SunMoon {
     this.sun.material.opacity = sunUp;
     this.glow.material.opacity = sunUp;
     this.moon.material.opacity = moonUp * 0.9;
+    this.moonGlow.material.opacity = moonUp * 0.5;
     this.sun.visible = this.enabled && sunUp > 0.01;
     this.glow.visible = this.enabled && sunUp > 0.01;
     this.moon.visible = this.enabled && moonUp > 0.01;
+    this.moonGlow.visible = this.enabled && moonUp > 0.01;
   }
 
   // Project the sun to screen UV (0..1). Returns false if behind the camera.
@@ -102,6 +115,7 @@ export class SunMoon {
       this.sun.visible = false;
       this.glow.visible = false;
       this.moon.visible = false;
+      this.moonGlow.visible = false;
     }
   }
 }

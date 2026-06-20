@@ -346,6 +346,8 @@ function frame(now: number): void {
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;
+  materials.shared.uMoonFactor.value = dayNight.moonFactor;
+  materials.shared.uNightAmbient.value = dayNight.nightAmbient;
   materials.shared.uFogColor.value.copy(dayNight.fogColor);
   materials.shared.uFogDensity.value = dayNight.fogDensity;
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
