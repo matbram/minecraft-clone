@@ -16,6 +16,7 @@ import {
   UNDERWATER_SURFACE_COLOR,
   UNDERWATER_DEEP_FOG_DENSITY,
   UNDERWATER_MAX_DEPTH,
+  UNDERWATER_FILL,
   UNDERWATER_PARTICLES,
   WATER_SURFACE_Y,
   MAX_FLUID_OPS_PER_TICK,
@@ -402,8 +403,12 @@ function frame(now: number): void {
   }
   materials.shared.uUnderwater.value = submerged ? 1 : 0;
   materials.shared.uUnderwaterDepth.value = uwDepth;
+  // Scattered ambient: present near the surface in daylight, fades with depth/night.
+  materials.shared.uUnderwaterFill.value = submerged
+    ? (1 - uwDepth) * dayNight.dayFactor * UNDERWATER_FILL
+    : 0;
   underwaterOverlay.setActive(submerged);
-  composer.setUnderwater(submerged ? 0.4 + 0.6 * uwDepth : 0, now / 1000);
+  composer.setUnderwater(submerged ? 0.12 + 0.88 * uwDepth : 0, now / 1000);
   underwaterParticles.update(frameDt, camera.position, submerged);
 
   chunkManager.update(frameDt, player.pos);

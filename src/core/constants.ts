@@ -153,16 +153,18 @@ export const SWIM_SPRINT_MULT = 1.35; // sprint-swim multiplier
 export const SWIM_ACCEL = 22; // horizontal accel in water
 export const WATER_DRAG = 0.8; // horizontal water friction (no input)
 
-export const UNDERWATER_FOG_DENSITY = 0.09; // murky, short view when submerged (shallow)
-export const UNDERWATER_FOG_COLOR = 0x2a5e7a; // deep blue-teal (shallow)
+export const UNDERWATER_FOG_DENSITY = 0.04; // shallow: clear & sunlit, see a good distance
+export const UNDERWATER_FOG_COLOR = 0x3f86a0; // lit cyan near the surface (not a black void)
 
-// Phase 7b: underwater overhaul. Color/darkening ramps with how deep the eye is
-// below WATER_SURFACE_Y (over UNDERWATER_MAX_DEPTH); caustics + drifting motes.
+// Phase 7b/9: underwater. Murk/darkening ramps with how deep the eye is below
+// WATER_SURFACE_Y (over UNDERWATER_MAX_DEPTH): clear & shaft-lit shallow -> moody
+// dark deep. Plus caustics, a scattered ambient fill, and drifting motes.
 export const UNDERWATER_DEEP_COLOR = 0x0a2230; // near-black blue at depth
 export const UNDERWATER_SURFACE_COLOR = 0x3a7a8c; // lit teal toward the surface (looking up)
 export const UNDERWATER_DEEP_FOG_DENSITY = 0.16; // denser/darker the deeper you go
-export const UNDERWATER_MAX_DEPTH = 24; // blocks below surface for full darkening
-export const CAUSTIC_STRENGTH = 0.35; // rippling-light highlight amount
+export const UNDERWATER_MAX_DEPTH = 32; // blocks below surface for full murk (gradual)
+export const CAUSTIC_STRENGTH = 0.22; // rippling-light highlight amount (less spotlighting)
+export const UNDERWATER_FILL = 0.18; // scattered near-surface ambient (daylight, fades w/ depth)
 export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
 
 // ---------------------------------------------------------------------------

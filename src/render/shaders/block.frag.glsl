@@ -15,9 +15,10 @@ uniform float uNightAmbient; // faint unshadowed night skyglow floor
 uniform vec3 uShadowDir;     // active shadow light (sun by day / moon by night)
 uniform vec3 uSkyLightColor; // tints the sky-light term: warm low sun / cool night
 
-// Phase 7b — underwater.
+// Phase 7b/9 — underwater.
 uniform float uUnderwater;      // 1 when the camera eye is submerged
 uniform float uUnderwaterDepth; // 0..1 = how far below the surface the eye is
+uniform float uUnderwaterFill;  // scattered near-surface ambient (lit-from-above)
 
 // Phase 4b — sun shadows (2-split cascade). uShadowStrength == 0 -> disabled.
 uniform sampler2D uShadowMap0;
@@ -107,12 +108,14 @@ void main() {
   lit = max(lit, vec3(uAmbient));                                  // cave floor
   lit *= vLight.z;                                                 // ambient occlusion
 
-  // Underwater caustics: rippling light on up-facing, sky-lit surfaces (fades
-  // out with depth as less light reaches the bottom).
+  // Underwater: scattered ambient fill (light from the surface reaches the whole
+  // volume near the top, fading with depth) so the scene reads coherently lit
+  // instead of a bright floor in a black void; plus rippling caustics on up-faces.
   if (uUnderwater > 0.5) {
+    lit = max(lit, vec3(uUnderwaterFill * (0.5 + 0.5 * vLight.x)));
     float up = max(normalize(vWorldNormal).y, 0.0);
     float c = caustics(vWorldPos.xz, uTime);
-    lit += vec3(c * up * vLight.x * 0.35 * (1.0 - uUnderwaterDepth));
+    lit += vec3(c * up * vLight.x * 0.22 * (1.0 - uUnderwaterDepth));
   }
 
   vec3 color = tex.rgb * lit;
@@ -143,9 +146,11 @@ void main() {
   }
 
   // Underwater light absorption: water removes red fastest with view distance
-  // (-> blue-green), plus a global darkening the deeper the eye is.
+  // (-> blue-green). Scaled by depth so the near-surface stays clear and only
+  // deep water absorbs hard; plus a global darkening the deeper the eye is.
   if (uUnderwater > 0.5) {
-    color *= exp(-vFogDepth * vec3(0.030, 0.012, 0.006));
+    float absorbAmt = 0.3 + 0.7 * uUnderwaterDepth;
+    color *= exp(-vFogDepth * vec3(0.020, 0.009, 0.004) * absorbAmt);
     color *= mix(1.0, 0.35, uUnderwaterDepth);
   }
 
