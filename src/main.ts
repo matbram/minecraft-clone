@@ -23,15 +23,86 @@ function readSeed(): number {
 
 const seed = readSeed();
 
+// Show a clear, actionable message instead of a silent blue screen when the
+// browser refuses a WebGL context (GPU acceleration off / GPU blocklisted).
+function showFatalError(title: string, bodyHtml: string): void {
+  const lockHint = document.getElementById('lock-hint');
+  if (lockHint) lockHint.remove();
+  const el = document.createElement('div');
+  el.style.cssText =
+    'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(10,20,30,0.92);color:#eaf2ff;font:15px/1.5 system-ui,sans-serif;' +
+    'padding:24px;z-index:9999;';
+  el.innerHTML =
+    `<div style="max-width:560px;background:#16222e;border:1px solid #2c4a63;` +
+    `border-radius:12px;padding:24px 28px;">` +
+    `<h2 style="margin:0 0 12px;font-size:20px;">${title}</h2>${bodyHtml}</div>`;
+  document.body.appendChild(el);
+}
+
+function webglAvailable(): boolean {
+  try {
+    const c = document.createElement('canvas');
+    return !!(c.getContext('webgl2') || c.getContext('webgl'));
+  } catch {
+    return false;
+  }
+}
+
 // --- renderer + scene ------------------------------------------------------
 const app = document.getElementById('app')!;
 const skyColor = new THREE.Color(0x8fc6f0);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+if (!webglAvailable()) {
+  showFatalError(
+    'WebGL is unavailable in this browser',
+    `<p>This game needs WebGL, but your browser could not create a graphics context
+       (the console shows <code>GL_RENDERER = Disabled</code>). The page itself loaded fine —
+       this is a browser/GPU setting on your machine.</p>
+     <p style="margin-top:12px"><b>To fix it (Chrome):</b></p>
+     <ol style="margin:6px 0 0 18px;padding:0">
+       <li>Open <code>chrome://settings/system</code> → enable
+           <b>“Use graphics acceleration when available”</b> → <b>Relaunch</b>.</li>
+       <li>If still off, open <code>chrome://gpu</code> and check the <b>WebGL</b> status.</li>
+       <li>As a last resort, open <code>chrome://flags</code>, enable
+           <b>“Override software rendering list”</b>, and relaunch.</li>
+       <li>Or fully quit &amp; reopen Chrome (the <code>BindToCurrentSequence failed</code>
+           error is often transient), or try another browser.</li>
+     </ol>`,
+  );
+  throw new Error('WebGL unavailable');
+}
+
+let renderer: THREE.WebGLRenderer;
+try {
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: 'high-performance',
+    failIfMajorPerformanceCaveat: false, // allow software fallback if present
+  });
+} catch (err) {
+  showFatalError(
+    'Could not start the 3D renderer',
+    `<p>Your browser blocked WebGL context creation. Enable hardware acceleration
+       in your browser settings (see <code>chrome://gpu</code>) and reload.</p>
+     <p style="margin-top:8px;opacity:0.7">${String(err)}</p>`,
+  );
+  throw err;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setClearColor(skyColor, 1);
 app.appendChild(renderer.domElement);
+
+// Surface a later context loss (e.g. GPU reset) instead of freezing silently.
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  showFatalError(
+    'WebGL context lost',
+    `<p>The GPU context was lost (driver reset or the tab was backgrounded too long).
+       Reload the page to continue.</p>`,
+  );
+});
 
 const scene = new THREE.Scene();
 scene.background = skyColor;
