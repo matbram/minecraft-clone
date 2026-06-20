@@ -21,8 +21,18 @@ import {
   AIR_DRAG,
   FLY_SPEED,
   FLY_SPRINT_MULT,
+  WATER_GRAVITY,
+  WATER_VERTICAL_DRAG,
+  WATER_MAX_SINK,
+  WATER_MAX_RISE,
+  SWIM_UP_ACCEL,
+  SWIM_DOWN_ACCEL,
+  SWIM_SPEED,
+  SWIM_SPRINT_MULT,
+  SWIM_ACCEL,
+  WATER_DRAG,
 } from '../core/constants';
-import { IS_SOLID } from '../core/BlockTypes';
+import { Block, IS_SOLID } from '../core/BlockTypes';
 import type { World } from '../world/World';
 import type { Input } from './Input';
 
@@ -45,6 +55,7 @@ export class Player {
   vel = new THREE.Vector3();
   prevPos = new THREE.Vector3();
   onGround = false;
+  inWater = false; // body overlaps water this tick (drives swim physics + HUD)
   mode = PlayerMode.WALK;
 
   private readonly world: World;
@@ -109,18 +120,22 @@ export class Player {
     const grounded = this.onGround; // from the previous tick
     const sprint = this.input.isDown('ControlLeft');
     const sneak = this.input.isDown('ShiftLeft');
+    const jump = this.input.isDown('Space');
     const wish = this.wishDir();
+    const inWater = this.bodyInWater();
+    this.inWater = inWater;
 
-    // Jump (uses last tick's grounded state).
-    if (this.input.isDown('Space') && grounded) {
+    // Jump only out of water (shallow wading still hops off the bottom); in
+    // water, Space is handled as swim-up below.
+    if (jump && grounded && !inWater) {
       this.vel.y = JUMP_VELOCITY;
     }
 
     // Horizontal acceleration toward the wish direction, capped to target speed.
-    let speed = WALK_SPEED;
-    if (sprint) speed *= SPRINT_MULT;
-    if (sneak) speed *= SNEAK_MULT;
-    const accel = grounded ? GROUND_ACCEL : AIR_ACCEL;
+    let speed = inWater ? SWIM_SPEED : WALK_SPEED;
+    if (sprint) speed *= inWater ? SWIM_SPRINT_MULT : SPRINT_MULT;
+    if (sneak && !inWater) speed *= SNEAK_MULT;
+    const accel = inWater ? SWIM_ACCEL : grounded ? GROUND_ACCEL : AIR_ACCEL;
     if (wish.x !== 0 || wish.z !== 0) {
       this.vel.x += wish.x * accel * dt;
       this.vel.z += wish.z * accel * dt;
@@ -130,14 +145,23 @@ export class Player {
         this.vel.z = (this.vel.z / hs) * speed;
       }
     } else {
-      const drag = grounded ? GROUND_DRAG : AIR_DRAG;
+      const drag = inWater ? WATER_DRAG : grounded ? GROUND_DRAG : AIR_DRAG;
       this.vel.x *= drag;
       this.vel.z *= drag;
     }
 
-    // Gravity.
-    this.vel.y -= GRAVITY * dt;
-    if (this.vel.y < -TERMINAL_VY) this.vel.y = -TERMINAL_VY;
+    // Vertical: buoyant swimming in water, normal gravity otherwise.
+    if (inWater) {
+      if (jump) this.vel.y += SWIM_UP_ACCEL * dt; // rise / climb out
+      if (sneak) this.vel.y -= SWIM_DOWN_ACCEL * dt; // dive
+      this.vel.y -= WATER_GRAVITY * dt; // gentle sink
+      this.vel.y *= WATER_VERTICAL_DRAG; // damping -> smooth bob + softens fall-in
+      if (this.vel.y < -WATER_MAX_SINK) this.vel.y = -WATER_MAX_SINK;
+      if (this.vel.y > WATER_MAX_RISE) this.vel.y = WATER_MAX_RISE;
+    } else {
+      this.vel.y -= GRAVITY * dt;
+      if (this.vel.y < -TERMINAL_VY) this.vel.y = -TERMINAL_VY;
+    }
 
     // Move + collide; recompute onGround.
     this.onGround = false;
@@ -148,6 +172,7 @@ export class Player {
 
   private tickFly(dt: number): void {
     this.onGround = false;
+    this.inWater = false;
     this.vel.set(0, 0, 0);
     const sprint = this.input.isDown('ControlLeft');
     const speed = FLY_SPEED * (sprint ? FLY_SPRINT_MULT : 1) * dt;
@@ -174,6 +199,16 @@ export class Player {
       for (let y = Math.floor(b.minY); y <= Math.floor(b.maxY); y++)
         for (let z = Math.floor(b.minZ); z <= Math.floor(b.maxZ); z++)
           if (IS_SOLID[this.world.getBlockWorld(x, y, z)]) return true;
+    return false;
+  }
+
+  // Any water block overlapping the player hitbox -> swim physics this tick.
+  private bodyInWater(): boolean {
+    const b = this.aabb();
+    for (let x = Math.floor(b.minX); x <= Math.floor(b.maxX); x++)
+      for (let y = Math.floor(b.minY); y <= Math.floor(b.maxY); y++)
+        for (let z = Math.floor(b.minZ); z <= Math.floor(b.maxZ); z++)
+          if (this.world.getBlockWorld(x, y, z) === Block.WATER) return true;
     return false;
   }
 

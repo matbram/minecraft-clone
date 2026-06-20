@@ -75,6 +75,15 @@
       }
       .inv-cell:hover { border-color: #fff; background: rgba(255,255,255,0.16); }
       .inv-cell canvas { image-rendering: pixelated; width: 48px; height: 48px; }
+
+      /* Underwater tint (Phase 5) — fades in while the eye is submerged */
+      #underwater-tint {
+        position: fixed; inset: 0; pointer-events: none; user-select: none;
+        z-index: 40; opacity: 0; transition: opacity 0.25s ease;
+        background:
+          radial-gradient(ellipse at center, rgba(42,94,122,0.25), rgba(20,54,80,0.7));
+      }
+      #underwater-tint.active { opacity: 1; }
     </style>
   </head>
   <body>
@@ -84,6 +93,7 @@
     <div id="hud"></div>
     <div id="hotbar"></div>
     <div id="inventory"></div>
+    <div id="underwater-tint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

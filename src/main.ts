@@ -10,8 +10,11 @@ import {
   DAY_FF_MULT,
   WIND_STRENGTH,
   LAYER_TRANSPARENT,
+  UNDERWATER_FOG_COLOR,
+  UNDERWATER_FOG_DENSITY,
   worldToChunk,
 } from './core/constants';
+import { Block } from './core/BlockTypes';
 import { surfaceHeight } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
@@ -40,6 +43,7 @@ import { Preset, PRESETS, nextPreset, type QualitySettings } from './render/Qual
 import { TextureRegistry } from './render/textures/TextureSource';
 import { ProceduralTextureSource } from './render/textures/ProceduralTextureSource';
 import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
+import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -191,6 +195,12 @@ const shadowMapper = new ShadowMapper(materials.shared);
 const planarReflection = new PlanarReflection(materials.shared);
 const tmpSunUv = new THREE.Vector3();
 
+// Phase 5: underwater tint + fog override. Precompute both colorspaces so the
+// override matches DayNight's (linear when ACES/post is on).
+const underwaterOverlay = new UnderwaterOverlay(document.getElementById('underwater-tint')!);
+const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
+const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
+
 function applyPreset(p: Preset): void {
   settings = PRESETS[p];
   composer.setPreset(settings);
@@ -338,6 +348,21 @@ function frame(now: number): void {
   materials.shared.uFogDensity.value = dayNight.fogDensity;
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
 
+  // Underwater (Phase 5): when the eye is in a water block, override the shared
+  // fog (DayNight rewrote it just above, so this auto-clears on surfacing) and
+  // fade in the tint overlay. Reflections are already disabled below the surface.
+  const submerged =
+    world.getBlockWorld(
+      Math.floor(camera.position.x),
+      Math.floor(camera.position.y),
+      Math.floor(camera.position.z),
+    ) === Block.WATER;
+  if (submerged) {
+    materials.shared.uFogColor.value.copy(settings.usePost ? uwFogColorLinear : uwFogColorSRGB);
+    materials.shared.uFogDensity.value = UNDERWATER_FOG_DENSITY;
+  }
+  underwaterOverlay.setActive(submerged);
+
   chunkManager.update(frameDt, player.pos);
 
   // Phase 4b (Cinematic): sun-depth pass first so reflected terrain is shadowed
@@ -364,7 +389,7 @@ function frame(now: number): void {
     hud.textContent =
       `fps ${fpsSmooth.toFixed(0)}\n` +
       `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
-      `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}\n` +
+      `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}${player.inWater ? ' swimming' : ''}\n` +
       `loaded ${chunkManager.loadedCount}  lightQ ${chunkManager.lightQueueLength}  meshQ ${chunkManager.meshQueueLength}\n` +
       `seed ${seed}  ${settings.name}  ${textures.active.id}  day ${dayNight.phase.toFixed(2)}${dayNight.paused ? ' (paused)' : ''}`;
   }

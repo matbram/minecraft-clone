@@ -130,3 +130,21 @@ export const SHADOW_STRENGTH = 0.55; // how dark fully-shadowed sky light gets
 
 export const WATER_SURFACE_Y = SEA_LEVEL + 1; // every water top-face sits here
 export const REFLECT_DOWNSCALE = 0.5; // planar reflection render-target scale
+
+// ---------------------------------------------------------------------------
+// Phase 5: swimming / water physics. Applied per fixed step (20 TPS), same as
+// the land physics above. Tune by feel.
+// ---------------------------------------------------------------------------
+export const WATER_GRAVITY = 9; // gentle sink (vs GRAVITY 28) -> buoyant feel
+export const WATER_VERTICAL_DRAG = 0.8; // per-tick vy damping -> smooth bob
+export const WATER_MAX_SINK = 6; // clamp downward swim speed (blocks/s)
+export const WATER_MAX_RISE = 6; // clamp upward swim speed (blocks/s)
+export const SWIM_UP_ACCEL = 30; // hold Space to rise toward the surface
+export const SWIM_DOWN_ACCEL = 24; // hold Shift to dive
+export const SWIM_SPEED = 3.0; // horizontal swim speed (vs WALK_SPEED 4.3)
+export const SWIM_SPRINT_MULT = 1.35; // sprint-swim multiplier
+export const SWIM_ACCEL = 22; // horizontal accel in water
+export const WATER_DRAG = 0.8; // horizontal water friction (no input)
+
+export const UNDERWATER_FOG_DENSITY = 0.09; // murky, short view when submerged
+export const UNDERWATER_FOG_COLOR = 0x2a5e7a; // deep blue-teal
