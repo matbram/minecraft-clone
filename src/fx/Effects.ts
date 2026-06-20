@@ -1,0 +1,94 @@
+// Orchestrates all Phase 2 "feel" FX. The only object main.ts wires. Interaction
+// fires onBreak/onPlace; everything else runs from update(). FX read state and
+// mutate only the camera + audio graph — never world/player/interaction — so the
+// whole phase is skippable and never load-bearing for correctness.
+
+import * as THREE from 'three';
+import { Block } from '../core/BlockTypes';
+import { EYE_HEIGHT } from '../core/constants';
+import type { World } from '../world/World';
+import type { Input } from '../player/Input';
+import { PlayerMode, type Player } from '../player/Player';
+import type { AtlasResult } from '../render/atlas';
+import { buildTileColors } from '../render/tileColors';
+import { Sfx } from '../audio/Sfx';
+import { Particles } from './Particles';
+import { ItemDrops } from './ItemDrops';
+import { ViewBob } from './ViewBob';
+import { CameraFx } from './CameraFx';
+
+const STEP_DIST = 2.2; // blocks traveled per footstep
+
+export class Effects {
+  private readonly sfx = new Sfx();
+  private readonly particles: Particles;
+  private readonly drops: ItemDrops;
+  private readonly viewBob = new ViewBob();
+  private readonly cameraFx: CameraFx;
+  private readonly tileColors: THREE.Color[];
+  private readonly world: World;
+  private readonly player: Player;
+  private readonly eye = new THREE.Vector3();
+  private readonly fallbackColor = new THREE.Color(0x888888);
+  private stepAccum = 0;
+  private ambienceStarted = false;
+
+  constructor(scene: THREE.Scene, world: World, input: Input, player: Player, atlas: AtlasResult) {
+    this.world = world;
+    this.player = player;
+    this.tileColors = buildTileColors(atlas.canvas);
+    this.particles = new Particles(scene);
+    this.drops = new ItemDrops(scene, world, atlas.texture);
+    this.cameraFx = new CameraFx(input);
+  }
+
+  resumeAudio(): void {
+    this.sfx.resume();
+    if (!this.ambienceStarted) {
+      this.sfx.ambience(true);
+      this.ambienceStarted = true;
+    }
+  }
+
+  setMuted(m: boolean): void {
+    this.sfx.setMuted(m);
+  }
+
+  onBreak(block: Block, x: number, y: number, z: number): void {
+    this.sfx.playBreak(block);
+    this.particles.burst(x + 0.5, y + 0.5, z + 0.5, this.tileColors[block] ?? this.fallbackColor, 10);
+    this.drops.spawn(block, x + 0.5, y + 0.5, z + 0.5);
+  }
+
+  onPlace(block: Block): void {
+    this.sfx.playPlace(block);
+  }
+
+  update(dt: number, camera: THREE.PerspectiveCamera): void {
+    const p = this.player;
+    this.particles.update(dt);
+
+    this.eye.set(p.pos.x, p.pos.y + EYE_HEIGHT, p.pos.z);
+    this.drops.update(dt, this.eye, () => this.sfx.playPickup());
+
+    // Footsteps tied to distance traveled (not frames/ticks).
+    const hspeed = Math.hypot(p.vel.x, p.vel.z);
+    if (p.onGround && p.mode === PlayerMode.WALK && hspeed > 0.5) {
+      this.stepAccum += hspeed * dt;
+      if (this.stepAccum >= STEP_DIST) {
+        this.stepAccum = 0;
+        const below = this.world.getBlockWorld(
+          Math.floor(p.pos.x),
+          Math.floor(p.pos.y - 0.1),
+          Math.floor(p.pos.z),
+        );
+        if (below !== Block.AIR) this.sfx.playStep(below);
+      }
+    } else {
+      this.stepAccum = Math.min(this.stepAccum, STEP_DIST * 0.8);
+    }
+
+    this.cameraFx.update(camera, p, dt);
+    this.viewBob.apply(camera, p, dt); // last: post-aim cosmetic offset
+  }
+}

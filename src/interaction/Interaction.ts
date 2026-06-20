@@ -19,6 +19,10 @@ function sameCell(a: RayHit | null, b: RayHit | null): boolean {
 
 export class Interaction {
   target: RayHit | null = null;
+  // Fired when a block is broken / placed (wired to FX in main; default no-op so
+  // mechanics work standalone and Phase 2 stays fully skippable).
+  onBreak: (block: Block, x: number, y: number, z: number) => void = () => {};
+  onPlace: (block: Block, x: number, y: number, z: number) => void = () => {};
   private breakProgress = 0;
   private paused = false;
 
@@ -60,7 +64,9 @@ export class Interaction {
     this.breakProgress += dt;
     if (breakTime <= 0 || this.breakProgress >= breakTime) {
       const c = this.target.cell;
+      const broken = this.target.block;
       this.world.editBlock(c.x, c.y, c.z, Block.AIR);
+      this.onBreak(broken, c.x, c.y, c.z);
       this.resetBreak();
       this.target = null; // re-acquired next updateAim
     } else {
@@ -75,7 +81,9 @@ export class Interaction {
     const p = this.target.place;
     if (this.world.getBlockWorld(p.x, p.y, p.z) !== Block.AIR) return;
     if (this.intersectsPlayer(p.x, p.y, p.z)) return; // don't place inside yourself
-    this.world.editBlock(p.x, p.y, p.z, this.hotbar.selected());
+    const type = this.hotbar.selected();
+    this.world.editBlock(p.x, p.y, p.z, type);
+    this.onPlace(type, p.x, p.y, p.z);
   }
 
   private resetBreak(): void {

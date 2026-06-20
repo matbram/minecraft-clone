@@ -24,6 +24,7 @@ import { BreakOverlay } from './render/BreakOverlay';
 import { Hotbar } from './ui/Hotbar';
 import { Inventory } from './ui/Inventory';
 import { Interaction } from './interaction/Interaction';
+import { Effects } from './fx/Effects';
 
 function readSeed(): number {
   const p = new URLSearchParams(location.search).get('seed');
@@ -149,9 +150,20 @@ const hotbar = new Hotbar(document.getElementById('hotbar')!, atlas.canvas);
 const inventory = new Inventory(document.getElementById('inventory')!, atlas.canvas, hotbar);
 const interaction = new Interaction(world, input, player, hotbar, outline, breakOverlay);
 
+// --- feel FX (Phase 2) -----------------------------------------------------
+const effects = new Effects(scene, world, input, player, atlas);
+interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
+interaction.onPlace = (b) => effects.onPlace(b);
+let audioResumed = false;
+let muted = false;
+
 // --- UI glue ---------------------------------------------------------------
 const lockHint = document.getElementById('lock-hint')!;
 input.onLockChange = (locked) => {
+  if (locked && !audioResumed) {
+    effects.resumeAudio(); // pointer-lock click is the user gesture for WebAudio
+    audioResumed = true;
+  }
   lockHint.classList.toggle('hidden', locked || inventory.open);
   if (locked && inventory.open) inventory.close(); // clicking back into the game closes inventory
 };
@@ -177,6 +189,11 @@ input.onKeyPress = (code) => {
   }
   if (code === 'KeyF') {
     player.toggleMode();
+    return;
+  }
+  if (code === 'KeyM') {
+    muted = !muted;
+    effects.setMuted(muted);
     return;
   }
   if (code.startsWith('Digit')) {
@@ -238,7 +255,8 @@ function frame(now: number): void {
   const alpha = physicsStarted ? accumulator / FIXED_DT : 0;
   player.applyToCamera(camera, alpha);
   camera.getWorldDirection(tmpDir);
-  interaction.updateAim(camera.position, tmpDir);
+  interaction.updateAim(camera.position, tmpDir); // aim BEFORE view-bob so the crosshair is steady
+  effects.update(frameDt, camera);
   chunkManager.update(frameDt, player.pos);
 
   materials.shared.uTime.value = now / 1000;
