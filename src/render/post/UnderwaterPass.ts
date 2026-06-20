@@ -30,9 +30,9 @@ export function createUnderwaterPass(): ShaderPass {
         uv.y += cos(uv.x * 20.0 + uTime * 1.9) * 0.0035 * uStrength;
         uv = clamp(uv, 0.0, 1.0);
         vec3 col = texture2D(tDiffuse, uv).rgb;
-        col = mix(col, col * vec3(0.55, 0.78, 1.0), uStrength * 0.22); // cool tint
-        float vig = smoothstep(1.1, 0.25, length(vUv - 0.5));          // edge darken
-        col *= mix(1.0, vig, uStrength * 0.35);
+        col = mix(col, col * vec3(0.45, 0.72, 1.0), uStrength * 0.35); // cool blue-green grade
+        float vig = smoothstep(1.15, 0.2, length(vUv - 0.5));          // edge darken
+        col *= mix(1.0, vig, uStrength * 0.5);
         gl_FragColor = vec4(col, 1.0);
       }
     `,

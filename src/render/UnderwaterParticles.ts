@@ -7,6 +7,22 @@ import * as THREE from 'three';
 const HALF = 12; // half-size of the cloud box around the camera (blocks)
 const DRIFT_UP = 0.15; // slow upward current (blocks/s)
 
+// Soft round sprite so motes read as out-of-focus specks, not hard squares.
+function softDisc(size = 32): THREE.Texture {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.5, 'rgba(255,255,255,0.45)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 export class UnderwaterParticles {
   private readonly geom = new THREE.BufferGeometry();
   private readonly points: THREE.Points;
@@ -26,9 +42,10 @@ export class UnderwaterParticles {
     this.geom.setAttribute('position', pa);
     const mat = new THREE.PointsMaterial({
       color: 0x9fc4e8,
-      size: 0.06,
+      map: softDisc(),
+      size: 0.11,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.45,
       depthWrite: false,
       sizeAttenuation: true,
     });

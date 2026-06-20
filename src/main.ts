@@ -13,6 +13,7 @@ import {
   UNDERWATER_FOG_COLOR,
   UNDERWATER_FOG_DENSITY,
   UNDERWATER_DEEP_COLOR,
+  UNDERWATER_SURFACE_COLOR,
   UNDERWATER_DEEP_FOG_DENSITY,
   UNDERWATER_MAX_DEPTH,
   UNDERWATER_PARTICLES,
@@ -210,6 +211,8 @@ const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
 const uwDeepColorSRGB = new THREE.Color(UNDERWATER_DEEP_COLOR);
 const uwDeepColorLinear = uwDeepColorSRGB.clone().convertSRGBToLinear();
+const uwSurfaceSRGB = new THREE.Color(UNDERWATER_SURFACE_COLOR);
+const uwSurfaceLinear = uwSurfaceSRGB.clone().convertSRGBToLinear();
 
 function applyPreset(p: Preset): void {
   settings = PRESETS[p];
@@ -348,10 +351,33 @@ function frame(now: number): void {
   interaction.updateAim(camera.position, tmpDir); // aim BEFORE view-bob so the crosshair is steady
   effects.update(frameDt, camera); // sets sprint FOV + applies view-bob to camera
 
+  // Underwater state (computed once; camera is final after view-bob). Hide the
+  // sky/celestial layers while submerged so stars/sky don't show through the water.
+  const submerged =
+    world.getBlockWorld(
+      Math.floor(camera.position.x),
+      Math.floor(camera.position.y),
+      Math.floor(camera.position.z),
+    ) === Block.WATER;
+  const uwDepth = submerged
+    ? Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_MAX_DEPTH, 0), 1)
+    : 0;
+  sunMoon.setVisible(settings.sun && !submerged);
+  clouds.setVisible(settings.clouds && !submerged);
+  stars.setVisible(settings.stars && !submerged);
+
   sky.update(camera.position, dayNight);
   sunMoon.update(camera.position, dayNight);
   clouds.update(camera.position, dayNight, frameDt);
   stars.update(camera.position, dayNight);
+  if (submerged) {
+    // Turn the sky dome into a water backdrop: brighter teal up (toward the
+    // surface), deep dark down. Match DayNight's colorspace (linear under post).
+    sky.overrideColors(
+      settings.usePost ? uwSurfaceLinear : uwSurfaceSRGB,
+      settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
+    );
+  }
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;
@@ -362,19 +388,12 @@ function frame(now: number): void {
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
 
-  // Underwater (Phase 5/7b): when the eye is in a water block, override the shared
-  // fog (DayNight rewrote it just above, so this auto-clears on surfacing), ramp
-  // color/density by how deep the eye is, drive the in-shader absorption/caustics,
-  // and fade in the tint overlay + post wobble. Reflections are disabled below.
-  const submerged =
-    world.getBlockWorld(
-      Math.floor(camera.position.x),
-      Math.floor(camera.position.y),
-      Math.floor(camera.position.z),
-    ) === Block.WATER;
-  let uwDepth = 0;
+  // Underwater (Phase 5/7b/8b): override the shared fog (DayNight rewrote it just
+  // above, so this auto-clears on surfacing), ramp color/density by how deep the
+  // eye is, drive the in-shader absorption/caustics, tint overlay, and a
+  // depth-scaled post wobble (clear & shaft-lit shallow -> moody deep). Reflections
+  // are already disabled below the surface.
   if (submerged) {
-    uwDepth = Math.min(Math.max((WATER_SURFACE_Y - camera.position.y) / UNDERWATER_MAX_DEPTH, 0), 1);
     const shallow = settings.usePost ? uwFogColorLinear : uwFogColorSRGB;
     const deep = settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB;
     materials.shared.uFogColor.value.copy(shallow).lerp(deep, uwDepth);
@@ -384,7 +403,7 @@ function frame(now: number): void {
   materials.shared.uUnderwater.value = submerged ? 1 : 0;
   materials.shared.uUnderwaterDepth.value = uwDepth;
   underwaterOverlay.setActive(submerged);
-  composer.setUnderwater(submerged ? 1 : 0, now / 1000);
+  composer.setUnderwater(submerged ? 0.4 + 0.6 * uwDepth : 0, now / 1000);
   underwaterParticles.update(frameDt, camera.position, submerged);
 
   chunkManager.update(frameDt, player.pos);
@@ -396,7 +415,9 @@ function frame(now: number): void {
 
   if (settings.usePost) {
     if (settings.godRays) {
-      const vis = sunMoon.sunScreenPos(camera, tmpSunUv) && dayNight.sunAboveHorizon;
+      // Sun shafts by day; moon shafts underwater at night.
+      let vis = dayNight.sunAboveHorizon && sunMoon.sunScreenPos(camera, tmpSunUv);
+      if (!vis && submerged) vis = sunMoon.moonScreenPos(camera, tmpSunUv);
       composer.updateGodRays(tmpSunUv, vis, 1 + dayNight.sunGlow * 2); // stronger shafts at low sun
     }
     composer.render();

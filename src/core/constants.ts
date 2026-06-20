@@ -159,6 +159,7 @@ export const UNDERWATER_FOG_COLOR = 0x2a5e7a; // deep blue-teal (shallow)
 // Phase 7b: underwater overhaul. Color/darkening ramps with how deep the eye is
 // below WATER_SURFACE_Y (over UNDERWATER_MAX_DEPTH); caustics + drifting motes.
 export const UNDERWATER_DEEP_COLOR = 0x0a2230; // near-black blue at depth
+export const UNDERWATER_SURFACE_COLOR = 0x3a7a8c; // lit teal toward the surface (looking up)
 export const UNDERWATER_DEEP_FOG_DENSITY = 0.16; // denser/darker the deeper you go
 export const UNDERWATER_MAX_DEPTH = 24; // blocks below surface for full darkening
 export const CAUSTIC_STRENGTH = 0.35; // rippling-light highlight amount
