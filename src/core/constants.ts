@@ -216,7 +216,9 @@ export const UNDERWATER_COLOR_DEPTH = 16; // water-above (blocks) for full deep-
 export const UNDERWATER_VISIBILITY_DENSITY = 0.05; // constant per-meter view fog (clarity)
 export const UW_VEIL_BASE = 0.45; // screen-tint veil strength (scaled by available light)
 export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
-export const WATER_SURFACE_VISIBILITY = 0.6; // how visible the surface ceiling is from below (tunable)
+export const WATER_SURFACE_VISIBILITY = 0.85; // how visible the surface ceiling is from below (tunable)
+export const WATER_CEILING_CYAN = 0x6fd0e8; // bright lit cyan of the surface seen from below
+export const WATER_CEILING_EDGE = 0x0b3a55; // ocean-blue toward grazing/edges (built-in vignette)
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

@@ -32,7 +32,10 @@ export function createUnderwaterPass(): ShaderPass {
         uv.y += cos(uv.x * 20.0 + uTime * 1.9) * 0.0035 * uStrength;
         uv = clamp(uv, 0.0, 1.0);
         vec3 col = texture2D(tDiffuse, uv).rgb;
-        col = mix(col, col * vec3(0.45, 0.72, 1.0), uStrength * 0.35); // cool blue-green grade
+        // Cohesive cyan cast — strong and present even in shallow water (a real
+        // snorkelling view is saturated blue, not faintly tinted).
+        float g = clamp(0.45 + 0.4 * uStrength, 0.0, 0.85);
+        col = mix(col, col * vec3(0.30, 0.62, 0.95), g);
 
         // Drifting caustic dapple: sparse moving highlights over the whole view so the
         // water reads as a lit volume, not a flat tint.
@@ -41,13 +44,11 @@ export function createUnderwaterPass(): ShaderPass {
         ca = smoothstep(0.7, 2.0, ca * 0.5 + 1.0);
         col *= 1.0 + ca * 0.16 * uCaustic;
 
-        // Snell window: a bright wash toward the surface (upper screen) when you look
-        // up in shallow water; gone with depth.
-        float surf = smoothstep(0.35, 1.0, vUv.y);
-        col += vec3(0.16, 0.26, 0.32) * surf * uSurface;
-
-        float vig = smoothstep(1.15, 0.2, length(vUv - 0.5));          // edge darken (pressure)
-        col *= mix(1.0, vig, uStrength * 0.6);
+        // Strong vignette, tinted to deep ocean-blue at the edges (the dark rim framing
+        // the bright Snell window in the reference) rather than a plain darken.
+        float vig = smoothstep(1.25, 0.2, length(vUv - 0.5));
+        float ve = mix(1.0, vig, 0.4 + 0.5 * uStrength);
+        col = mix(vec3(0.02, 0.10, 0.18), col, ve);
         gl_FragColor = vec4(col, 1.0);
       }
     `,

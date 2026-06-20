@@ -10,7 +10,7 @@
 
 import * as THREE from 'three';
 
-const SIZE = 1600; // big enough to fill the upper view; far parts fade in the shader
+const SIZE = 3000; // larger than the distance fade range so the plane edge never shows
 
 const vertexShader = /* glsl */ `
   varying vec3 vWorldPos;
@@ -23,44 +23,42 @@ const vertexShader = /* glsl */ `
 const fragmentShader = /* glsl */ `
   precision highp float;
   varying vec3 vWorldPos;
-  uniform vec3 uCamPos, uSurfaceColor, uDeepColor;
+  uniform vec3 uCamPos, uSurfaceColor, uDeepColor; // uSurfaceColor=bright cyan, uDeepColor=edge blue
   uniform float uStrength; // user tuning knob (0..1): overall surface opacity
   uniform float uTime, uFade;
 
-  // Two octaves of drifting waves + a sharper glint band so it reads as a moving
-  // water surface, not a flat tint.
-  float ripple(vec2 p) {
+  // Layered drifting waves + a finer crinkle -> the busy, rippling surface texture you
+  // see looking up while snorkelling (not a flat tint).
+  float surf(vec2 p) {
     float w = sin(p.x * 0.55 + uTime * 1.3)
             + sin(p.y * 0.48 - uTime * 1.1)
             + sin((p.x + p.y) * 0.33 + uTime * 0.7);
-    w += 0.5 * (sin(p.x * 1.7 - uTime * 2.1) + sin(p.y * 1.9 + uTime * 1.7));
+    w += 0.6 * (sin(p.x * 1.7 - uTime * 2.1) + sin(p.y * 1.9 + uTime * 1.7));
+    w += 0.35 * sin((p.x - p.y) * 3.1 + uTime * 2.7);
     return w;
   }
 
   void main() {
     vec3 v = normalize(vWorldPos - uCamPos);
-    float up = clamp(v.y, 0.0, 1.0);              // how much we look UP at this point
-    float win = smoothstep(0.60, 0.95, up);        // inside the Snell refraction cone
-    float rw = ripple(vWorldPos.xz);
-    float r = rw * 0.12;                            // gentle brightness wobble
-    float glint = smoothstep(2.2, 3.2, rw) * (1.0 - win); // bright crests on the mirror
+    float up = clamp(v.y, 0.0, 1.0);               // 1 = looking straight up the cone
+    float win = smoothstep(0.45, 0.97, up);         // broad, soft Snell window
+    float rw = surf(vWorldPos.xz);
+    float ripple = rw * 0.12;                        // brightness wobble
+    float glint = smoothstep(2.4, 3.6, rw);          // bright crests
 
-    // Sheet: a believable mid water-surface teal on the mirror (total internal
-    // reflection of the murk below), brightening toward the lit surface colour and
-    // then near-white inside the window (the compressed sky punching through).
-    vec3 mirror = mix(uDeepColor * 1.8, uSurfaceColor, 0.5);
-    vec3 sheet = mix(mirror, uSurfaceColor, win);
-    vec3 col = mix(sheet, vec3(1.0), win * 0.7) * (1.0 + r) + glint * 0.5;
-    col *= (0.45 + 0.55 * uFade);                   // dim in low light, but still present
+    // Dome colour: ocean-blue at grazing edges -> bright cyan toward the window ->
+    // near-white in the centre. This bright-centre / dark-rim IS the reference vignette.
+    vec3 base = mix(uDeepColor, uSurfaceColor, smoothstep(0.0, 0.7, up));
+    vec3 col = mix(base, vec3(1.0), win * 0.7);
+    col += (ripple + glint * 0.6) * (0.3 + 0.7 * win); // ripples sparkle most near the window
+    col *= (0.4 + 0.6 * uFade);                         // dim at night, full in daylight
 
-    // Near-opaque mirror everywhere you're NOT looking up the cone; the window stays
-    // see-through so the bright sky shows only there. Presence clamped so dim light
-    // still reads as a surface instead of vanishing.
+    // Opacity: opaque sheet occludes the sky/clouds everywhere except the see-through
+    // window (so the sun shows through there). Decoupled from light so it's ALWAYS a
+    // surface, day or night; the knob (uStrength) scales it.
     float dist = length(vWorldPos.xz - uCamPos.xz);
-    float distFade = smoothstep(900.0, 60.0, dist);
-    // uFade handles light/depth/cave presence; uStrength is the user knob scaling the
-    // overall opacity linearly (so it actually thins the daylit surface, not just dim ones).
-    float alpha = mix(0.96, 0.22, win) * distFade * clamp(uFade * 2.0, 0.25, 1.0) * uStrength;
+    float distFade = smoothstep(1400.0, 30.0, dist);
+    float alpha = mix(0.94, 0.20, win) * distFade * uStrength;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;
@@ -104,8 +102,8 @@ export class WaterCeiling {
     time: number,
     fade: number,
     strength: number,
-    surfaceColor: THREE.Color,
-    deepColor: THREE.Color,
+    cyan: THREE.Color, // bright lit surface colour (window centre brightens to white)
+    edge: THREE.Color, // ocean-blue toward grazing edges (the dark vignette rim)
   ): void {
     if (fade <= 0.001 || strength <= 0.001 || surfaceY <= camPos.y) {
       this.mesh.visible = false;
@@ -117,8 +115,8 @@ export class WaterCeiling {
     this.mat.uniforms.uFade.value = Math.min(1, fade);
     this.mat.uniforms.uStrength.value = Math.min(1, strength);
     (this.mat.uniforms.uCamPos.value as THREE.Vector3).copy(camPos);
-    (this.mat.uniforms.uSurfaceColor.value as THREE.Color).copy(surfaceColor);
-    (this.mat.uniforms.uDeepColor.value as THREE.Color).copy(deepColor);
+    (this.mat.uniforms.uSurfaceColor.value as THREE.Color).copy(cyan);
+    (this.mat.uniforms.uDeepColor.value as THREE.Color).copy(edge);
   }
 
   hide(): void {

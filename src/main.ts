@@ -12,6 +12,8 @@ import {
   LAYER_TRANSPARENT,
   UNDERWATER_FOG_COLOR,
   UNDERWATER_DEEP_COLOR,
+  WATER_CEILING_CYAN,
+  WATER_CEILING_EDGE,
   UNDERWATER_COLOR_DEPTH,
   UNDERWATER_PARTICLES,
   MAX_FLUID_OPS_PER_TICK,
@@ -247,6 +249,11 @@ const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
 const uwDeepColorSRGB = new THREE.Color(UNDERWATER_DEEP_COLOR);
 const uwDeepColorLinear = uwDeepColorSRGB.clone().convertSRGBToLinear();
+// Phase 11.5e: the surface-ceiling sheet (bright lit cyan) + its grazing-edge ocean blue.
+const ceilCyanSRGB = new THREE.Color(WATER_CEILING_CYAN);
+const ceilCyanLinear = ceilCyanSRGB.clone().convertSRGBToLinear();
+const ceilEdgeSRGB = new THREE.Color(WATER_CEILING_EDGE);
+const ceilEdgeLinear = ceilEdgeSRGB.clone().convertSRGBToLinear();
 
 function applyPreset(p: Preset): void {
   settings = PRESETS[p];
@@ -568,10 +575,14 @@ function frame(now: number): void {
   clouds.update(camera.position, dayNight, frameDt);
   stars.update(camera.position, dayNight);
   // Absorb the above-water visuals toward the deep water color as the eye descends.
+  // Sky + sun/moon stay mostly bright (they show through the Snell window + feed the god-ray
+  // shafts); clouds & stars are hidden entirely while submerged — they read as "sky" and
+  // break the underwater illusion (the surface ceiling occludes them anyway).
+  const hideFade = submerged ? 1 : 0;
   sky.setUnderwater(lightFade, settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB);
   sunMoon.setUnderwaterFade(lightFade);
-  stars.setUnderwaterFade(lightFade);
-  clouds.setUnderwaterFade(lightFade);
+  stars.setUnderwaterFade(hideFade);
+  clouds.setUnderwaterFade(hideFade);
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;
@@ -621,8 +632,8 @@ function frame(now: number): void {
       now / 1000,
       ceilFade,
       Tunables.waterSurface,
-      settings.usePost ? uwFogColorLinear : uwFogColorSRGB,
-      settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB,
+      settings.usePost ? ceilCyanLinear : ceilCyanSRGB,
+      settings.usePost ? ceilEdgeLinear : ceilEdgeSRGB,
     );
   } else {
     waterCeiling.hide();
