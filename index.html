@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Minecraft Clone</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #87ceeb; }
+      #app { position: fixed; inset: 0; }
+      canvas { display: block; }
+
+      /* Crosshair */
+      #crosshair {
+        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        width: 18px; height: 18px; pointer-events: none; opacity: 0.8;
+      }
+      #crosshair::before, #crosshair::after {
+        content: ""; position: absolute; background: #fff;
+        box-shadow: 0 0 1px rgba(0,0,0,0.6);
+      }
+      #crosshair::before { left: 50%; top: 0; width: 2px; height: 100%; transform: translateX(-50%); }
+      #crosshair::after { top: 50%; left: 0; height: 2px; width: 100%; transform: translateY(-50%); }
+
+      /* Lock prompt */
+      #lock-hint {
+        position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        font: 16px/1.4 system-ui, sans-serif; color: #fff; text-align: center;
+        background: rgba(0,0,0,0.55); padding: 18px 26px; border-radius: 10px;
+        pointer-events: none; user-select: none;
+      }
+      #lock-hint.hidden { display: none; }
+
+      /* Debug HUD */
+      #hud {
+        position: fixed; left: 8px; top: 8px;
+        font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #e8f0ff;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.8); white-space: pre; pointer-events: none;
+        user-select: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="crosshair"></div>
+    <div id="lock-hint">Click to look around<br /><small>WASD move · Space/Shift up·down · Esc release</small></div>
+    <div id="hud"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
