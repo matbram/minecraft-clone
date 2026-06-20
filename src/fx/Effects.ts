@@ -18,6 +18,7 @@ import { ViewBob } from './ViewBob';
 import { CameraFx } from './CameraFx';
 
 const STEP_DIST = 2.2; // blocks traveled per footstep
+const SPLASH_COLOR = new THREE.Color(0xbfe6ff); // whitish-blue droplets
 
 export class Effects {
   private readonly sfx = new Sfx();
@@ -69,6 +70,19 @@ export class Effects {
   // Phase 11b: soft cue when a food item is eaten (reuses the pickup chime).
   onEat(): void {
     this.sfx.playPickup();
+  }
+
+  // Phase 11.5 underwater: muffle + ambience swap (safe to call every frame — Sfx
+  // dedupes), a splash (sound + droplet burst) on crossing the surface, and bubbles.
+  setSubmerged(on: boolean): void {
+    this.sfx.setSubmerged(on);
+  }
+  splash(x: number, y: number, z: number, bright = 1): void {
+    this.sfx.playSplash();
+    this.particles.burst(x, y, z, SPLASH_COLOR, 16, bright);
+  }
+  bubble(): void {
+    this.sfx.playBubble();
   }
 
   update(dt: number, camera: THREE.PerspectiveCamera, lightMul: number): void {

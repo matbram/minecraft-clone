@@ -7,6 +7,7 @@ import type { Input } from '../player/Input';
 
 const FOV_BASE = 70;
 const FOV_SPRINT = 78;
+const FOV_WATER = 66; // slightly narrower underwater — a dense-medium lens cue
 const LERP = 8;
 
 export class CameraFx {
@@ -16,7 +17,7 @@ export class CameraFx {
     const hspeed = Math.hypot(player.vel.x, player.vel.z);
     const moving = hspeed > 0.5 && player.onGround && player.mode === PlayerMode.WALK;
     const sprinting = this.input.isDown('ControlLeft');
-    const target = sprinting && moving ? FOV_SPRINT : FOV_BASE;
+    const target = player.inWater ? FOV_WATER : sprinting && moving ? FOV_SPRINT : FOV_BASE;
 
     let next = camera.fov + (target - camera.fov) * (1 - Math.exp(-LERP * dt));
     if (Math.abs(next - target) < 0.05) next = target; // settle exactly

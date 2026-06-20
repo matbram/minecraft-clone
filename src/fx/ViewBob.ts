@@ -13,6 +13,7 @@ const LATERAL = 0.6;
 export class ViewBob {
   private phase = 0;
   private ampSmooth = 0;
+  private waterT = 0;
   private readonly right = new THREE.Vector3();
 
   apply(camera: THREE.PerspectiveCamera, player: Player, dt: number): void {
@@ -21,14 +22,21 @@ export class ViewBob {
     const targetAmp = active ? Math.min(AMP_MAX, hspeed * AMP_K) : 0;
     this.ampSmooth += (targetAmp - this.ampSmooth) * (1 - Math.exp(-10 * dt));
     if (active) this.phase += dt * (FREQ_BASE + hspeed * FREQ_K);
-    if (this.ampSmooth < 1e-4) return;
 
-    const dy = Math.sin(this.phase * 2) * this.ampSmooth;
-    const dx = Math.sin(this.phase) * this.ampSmooth * LATERAL;
-    // camera.quaternion is kept in sync when camera.rotation is set, so this is
-    // the up-to-date world-space right vector without forcing a matrix update.
-    this.right.set(1, 0, 0).applyQuaternion(camera.quaternion);
-    camera.position.addScaledVector(this.right, dx);
-    camera.position.y += dy;
+    if (this.ampSmooth >= 1e-4) {
+      const dy = Math.sin(this.phase * 2) * this.ampSmooth;
+      const dx = Math.sin(this.phase) * this.ampSmooth * LATERAL;
+      // camera.quaternion is kept in sync when camera.rotation is set, so this is
+      // the up-to-date world-space right vector without forcing a matrix update.
+      this.right.set(1, 0, 0).applyQuaternion(camera.quaternion);
+      camera.position.addScaledVector(this.right, dx);
+      camera.position.y += dy;
+    }
+
+    // Phase 11.5: gentle idle buoyancy rock while in water (suspended feel).
+    if (player.inWater) {
+      this.waterT += dt;
+      camera.position.y += Math.sin(this.waterT * 1.2) * 0.035;
+    }
   }
 }

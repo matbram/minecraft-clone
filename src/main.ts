@@ -51,6 +51,7 @@ import { ProceduralTextureSource } from './render/textures/ProceduralTextureSour
 import { ProceduralPackTextureSource } from './render/textures/proceduralPack';
 import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { UnderwaterParticles } from './render/UnderwaterParticles';
+import { BubbleParticles } from './render/BubbleParticles';
 import { Settings } from './ui/Settings';
 import { PauseMenu } from './ui/PauseMenu';
 import { Survival } from './player/Survival';
@@ -236,6 +237,10 @@ const tmpSunUv = new THREE.Vector3();
 // colorspaces (shallow + deep) so the override matches DayNight's (linear under ACES).
 const underwaterOverlay = new UnderwaterOverlay(document.getElementById('underwater-tint')!);
 const underwaterParticles = new UnderwaterParticles(scene, UNDERWATER_PARTICLES);
+const bubbles = new BubbleParticles(scene); // Phase 11.5: bubbles rising from the player
+let wasSubmerged = false; // edge-detect surface crossings for the splash
+let splashCooldown = 0; // rate-limits splash so bobbing at the surface doesn't spam
+let bubbleSfxTimer = 0; // throttles occasional bubble blips while submerged
 const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
 const uwDeepColorSRGB = new THREE.Color(UNDERWATER_DEEP_COLOR);
@@ -511,16 +516,38 @@ function frame(now: number): void {
   // how lit it is here (≈0 in an unlit cave, ~1 in a sunlit shallow pool).
   let depthFrac = 0;
   let uwBright = 0;
+  let eyeWaterAbove = 0; // water blocks above the eye (for the waterline split)
   if (submerged) {
     const ex = Math.floor(camera.position.x);
     const ey = Math.floor(camera.position.y);
     const ez = Math.floor(camera.position.z);
-    const eyeWater = world.waterDepthAbove(ex, ey, ez);
-    depthFrac = Math.min(eyeWater / UNDERWATER_COLOR_DEPTH, 1);
-    const downwell = Math.exp(-Tunables.waterAbsorb * eyeWater); // open-column darkening
+    eyeWaterAbove = world.waterDepthAbove(ex, ey, ez);
+    depthFrac = Math.min(eyeWaterAbove / UNDERWATER_COLOR_DEPTH, 1);
+    const downwell = Math.exp(-Tunables.waterAbsorb * eyeWaterAbove); // open-column darkening
     uwBright = Math.min(world.brightnessAt(ex, ey, ez, fxSkyMul) * downwell, 1);
   }
   const lightFade = depthFrac; // surface light (sky/sun/rays) fades with local depth
+
+  // Phase 11.5 immersion: muffle/ambience (Sfx dedupes), splash + bubble burst on
+  // crossing the surface, the rising bubble stream, and occasional bubble blips.
+  effects.setSubmerged(submerged);
+  splashCooldown -= frameDt;
+  if (submerged !== wasSubmerged) {
+    if (splashCooldown <= 0) {
+      effects.splash(camera.position.x, camera.position.y, camera.position.z, Math.max(fxSkyMul, 0.4));
+      splashCooldown = 0.4; // don't spam while bobbing right at the surface
+    }
+    wasSubmerged = submerged;
+  }
+  const swimSpeed = Math.hypot(player.vel.x, player.vel.y, player.vel.z);
+  bubbles.update(frameDt, camera, submerged, swimSpeed, world, fxSkyMul);
+  if (submerged) {
+    bubbleSfxTimer -= frameDt;
+    if (bubbleSfxTimer <= 0) {
+      effects.bubble();
+      bubbleSfxTimer = 0.5 + Math.random() * 1.3;
+    }
+  }
 
   // Survival HUD (Phase 11b): cheap when unchanged (icons redraw only on change);
   // the air row shows while the eye is submerged. Hidden entirely in Creative.
@@ -569,7 +596,23 @@ function frame(now: number): void {
   materials.shared.uUnderwaterDepth.value = depthFrac;
   // Screen veil: tunable tint strength, scaled by the real available light here.
   underwaterOverlay.setIntensity(submerged ? Tunables.underwaterTint * uwBright : 0);
-  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000);
+  // Half-submerged waterline (Phase 11.5): when the eye sits just under the local
+  // surface, split the veil so the bottom is tinted and the top is clear; the divider
+  // follows look-pitch (look up -> less water). Null = full tint / off.
+  let waterline: number | null = null;
+  if (submerged) {
+    const surfaceY = Math.floor(camera.position.y) + eyeWaterAbove; // top of the column
+    if (surfaceY - camera.position.y < 0.6) {
+      waterline = Math.min(1, Math.max(0, 0.5 - input.pitch * 0.7));
+    }
+  }
+  underwaterOverlay.setWaterline(waterline);
+  // Caustic dapple fades with depth (shallow+lit shimmers most); Snell window
+  // brightens when looking up in shallow water.
+  const uwCaustic = submerged ? (1 - depthFrac) * uwBright : 0;
+  const lookUp = Math.max(0, Math.sin(input.pitch));
+  const uwSurface = submerged ? lookUp * (1 - depthFrac) * uwBright : 0;
+  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000, uwCaustic, uwSurface);
   composer.setExposure(Tunables.brightness); // live "Brightness" knob (post path)
   underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
@@ -592,6 +635,12 @@ function frame(now: number): void {
       } else {
         vis = sunMoon.moonScreenPos(camera, tmpSunUv);
         intensity = 0.5; // dim moonlight shafts
+      }
+      // Phase 11.5: underwater shafts sway + read a touch stronger (light-respecting,
+      // scaled by how lit it is here so they stay faint at night / in caves).
+      if (submerged) {
+        tmpSunUv.x += Math.sin(now / 1000 * 0.6) * 0.03;
+        intensity *= 1 + 0.4 * uwBright;
       }
       composer.updateGodRays(tmpSunUv, vis, intensity);
     }

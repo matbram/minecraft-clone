@@ -100,11 +100,14 @@ export class Composer {
     this.aces.uniforms.uExposure.value = v;
   }
 
-  // Per-frame underwater distortion strength (0 = off/passthrough).
-  setUnderwater(strength: number, time: number): void {
+  // Per-frame underwater distortion (0 = off/passthrough) + caustic dapple and the
+  // Snell-window surface brightening (Phase 11.5).
+  setUnderwater(strength: number, time: number, caustic = 0, surface = 0): void {
     this.underwater.enabled = strength > 0;
     this.underwater.uniforms.uStrength.value = strength;
     this.underwater.uniforms.uTime.value = time;
+    this.underwater.uniforms.uCaustic.value = caustic;
+    this.underwater.uniforms.uSurface.value = surface;
   }
 
   setSize(w: number, h: number, pixelRatio: number): void {
