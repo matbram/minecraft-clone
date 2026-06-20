@@ -8,7 +8,7 @@
 //   attribute: (skyLight 0..1, blockLight 0..1, ao 0..1). The shader combines
 //   them as max(block, sky*day)*ao.
 
-import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT } from '../core/constants';
+import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
@@ -21,6 +21,7 @@ export interface MeshArrays {
   light: Float32Array; // 3 floats/vertex: sky, block, ao
   uvs: Float32Array;
   wave: Float32Array; // 1 float/vertex: 1 = foliage (waves), 0 = static
+  refl: Float32Array; // 1 float/vertex: 1 = reflective water top face, 0 = other
   indices: Uint32Array;
 }
 
@@ -67,12 +68,13 @@ interface Accum {
   light: number[];
   uvs: number[];
   wave: number[];
+  refl: number[];
   indices: number[];
   count: number;
 }
 
 function newAccum(): Accum {
-  return { positions: [], normals: [], light: [], uvs: [], wave: [], indices: [], count: 0 };
+  return { positions: [], normals: [], light: [], uvs: [], wave: [], refl: [], indices: [], count: 0 };
 }
 
 function finalize(a: Accum): MeshArrays | null {
@@ -83,6 +85,7 @@ function finalize(a: Accum): MeshArrays | null {
     light: new Float32Array(a.light),
     uvs: new Float32Array(a.uvs),
     wave: new Float32Array(a.wave),
+    refl: new Float32Array(a.refl),
     indices: new Uint32Array(a.indices),
   };
 }
@@ -156,6 +159,11 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           const nbz = wz + face.n[2];
           if (!shouldRenderFace(b, blockAt(nbx, nby, nbz))) continue;
 
+          // Reflective only for the exposed water top-face at the sea-level
+          // surface (face 2 = +Y, y === SEA_LEVEL -> top at WATER_SURFACE_Y).
+          // Any other water (sides / future off-plane water) stays flat.
+          const reflFlag = b === Block.WATER && f === 2 && y === SEA_LEVEL ? 1 : 0;
+
           const tile = tileOf(b, f);
           const col = tile % ATLAS_COLS;
           const row = Math.floor(tile / ATLAS_COLS);
@@ -222,6 +230,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const cv = face.uv[i][1];
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
             acc.wave.push(waveFlag);
+            acc.refl.push(reflFlag);
           }
 
           // Flip the quad diagonal to avoid AO interpolation artifacts.

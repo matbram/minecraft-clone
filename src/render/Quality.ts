@@ -24,6 +24,8 @@ export interface QualitySettings {
   sun: boolean;
   clouds: boolean;
   stars: boolean;
+  shadows: boolean; // Cinematic only: real-time sun shadows
+  waterReflections: boolean; // Cinematic only: planar water reflection
   renderDistance: number;
 }
 
@@ -39,6 +41,8 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: false,
     stars: false,
+    shadows: false,
+    waterReflections: false,
     renderDistance: RENDER_DISTANCE_LOW,
   },
   [Preset.MEDIUM]: {
@@ -52,6 +56,8 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: true,
     stars: true,
+    shadows: false,
+    waterReflections: false,
     renderDistance: RENDER_DISTANCE_MED,
   },
   [Preset.CINEMATIC]: {
@@ -65,6 +71,8 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: true,
     stars: true,
+    shadows: true,
+    waterReflections: true,
     renderDistance: RENDER_DISTANCE_CINEMATIC,
   },
 };

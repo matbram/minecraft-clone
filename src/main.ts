@@ -9,6 +9,7 @@ import {
   MAX_SUBSTEPS,
   DAY_FF_MULT,
   WIND_STRENGTH,
+  LAYER_TRANSPARENT,
   worldToChunk,
 } from './core/constants';
 import { surfaceHeight } from './core/WorldGen';
@@ -33,6 +34,8 @@ import { SunMoon } from './render/SunMoon';
 import { Clouds } from './render/Clouds';
 import { Stars } from './render/Stars';
 import { Composer } from './render/post/Composer';
+import { ShadowMapper } from './render/shadows/ShadowMapper';
+import { PlanarReflection } from './render/water/PlanarReflection';
 import { Preset, PRESETS, nextPreset, type QualitySettings } from './render/Quality';
 import { TextureRegistry } from './render/textures/TextureSource';
 import { ProceduralTextureSource } from './render/textures/ProceduralTextureSource';
@@ -134,6 +137,9 @@ const scene = new THREE.Scene();
 // Sky dome (Phase 4a) replaces the flat background; clear color is a fallback.
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+// Transparent (water/glass) chunks live only on LAYER_TRANSPARENT so the planar
+// reflection camera won't reflect the water; the main camera must opt back in.
+camera.layers.enable(LAYER_TRANSPARENT);
 
 // --- assets + systems ------------------------------------------------------
 const atlas = buildAtlas();
@@ -181,6 +187,8 @@ const sunMoon = new SunMoon(scene);
 const clouds = new Clouds(scene);
 const stars = new Stars(scene);
 const composer = new Composer(renderer, scene, camera, settings);
+const shadowMapper = new ShadowMapper(materials.shared);
+const planarReflection = new PlanarReflection(materials.shared);
 const tmpSunUv = new THREE.Vector3();
 
 function applyPreset(p: Preset): void {
@@ -192,6 +200,9 @@ function applyPreset(p: Preset): void {
   sunMoon.setVisible(settings.sun);
   clouds.setVisible(settings.clouds);
   stars.setVisible(settings.stars);
+  // Phase 4b: toggling only binds/unbinds maps + strengths -> no rebuild.
+  shadowMapper.setActive(settings.shadows);
+  planarReflection.setActive(settings.waterReflections);
 }
 applyPreset(Preset.MEDIUM);
 
@@ -262,6 +273,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   composer.setSize(w, h, Math.min(window.devicePixelRatio, 2));
+  planarReflection.setSize(w, h);
 });
 
 // --- persistence -----------------------------------------------------------
@@ -327,6 +339,11 @@ function frame(now: number): void {
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
 
   chunkManager.update(frameDt, player.pos);
+
+  // Phase 4b (Cinematic): sun-depth pass first so reflected terrain is shadowed
+  // too, then the planar water reflection. Both restore render target/override.
+  if (settings.shadows) shadowMapper.render(renderer, scene, camera.position, dayNight);
+  if (settings.waterReflections) planarReflection.render(renderer, scene, camera);
 
   if (settings.usePost) {
     if (settings.godRays) {

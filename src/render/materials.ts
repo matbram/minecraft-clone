@@ -4,7 +4,13 @@
 // updating them once per frame updates both. Only uAlphaTest differs per pass.
 
 import * as THREE from 'three';
-import { DAY_FACTOR_DEFAULT, LIGHT_AMBIENT, WIND_SPEED, WIND_STRENGTH } from '../core/constants';
+import {
+  DAY_FACTOR_DEFAULT,
+  LIGHT_AMBIENT,
+  WIND_SPEED,
+  WIND_STRENGTH,
+  SHADOW_MAP_SIZE,
+} from '../core/constants';
 import vertexShader from './shaders/block.vert.glsl?raw';
 import fragmentShader from './shaders/block.frag.glsl?raw';
 
@@ -21,6 +27,17 @@ export interface Materials {
     uSunDir: { value: THREE.Vector3 };
     uWind: { value: number };
     uWindSpeed: { value: number };
+    // Phase 4b — sun shadows (Cinematic; uShadowStrength=0 disables + early-outs).
+    uShadowMap0: { value: THREE.Texture | null };
+    uShadowMap1: { value: THREE.Texture | null };
+    uShadowMatrix0: { value: THREE.Matrix4 };
+    uShadowMatrix1: { value: THREE.Matrix4 };
+    uShadowStrength: { value: number };
+    uShadowTexel: { value: number };
+    // Phase 4b — planar reflective water (uReflectStrength=0 disables + early-outs).
+    uReflectMap: { value: THREE.Texture | null };
+    uReflectMatrix: { value: THREE.Matrix4 };
+    uReflectStrength: { value: number };
   };
 }
 
@@ -35,6 +52,15 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uSunDir: { value: new THREE.Vector3(0, 1, 0) },
     uWind: { value: WIND_STRENGTH },
     uWindSpeed: { value: WIND_SPEED },
+    uShadowMap0: { value: null as THREE.Texture | null },
+    uShadowMap1: { value: null as THREE.Texture | null },
+    uShadowMatrix0: { value: new THREE.Matrix4() },
+    uShadowMatrix1: { value: new THREE.Matrix4() },
+    uShadowStrength: { value: 0 },
+    uShadowTexel: { value: 1 / SHADOW_MAP_SIZE },
+    uReflectMap: { value: null as THREE.Texture | null },
+    uReflectMatrix: { value: new THREE.Matrix4() },
+    uReflectStrength: { value: 0 },
   };
 
   const opaque = new THREE.ShaderMaterial({

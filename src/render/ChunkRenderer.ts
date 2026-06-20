@@ -3,7 +3,7 @@
 // geometry on unload (critical to avoid GPU memory leaks / GC stalls).
 
 import * as THREE from 'three';
-import { CX, CZ } from '../core/constants';
+import { CX, CZ, LAYER_TRANSPARENT, LAYER_SHADOW_CASTER } from '../core/constants';
 import { chunkKey } from '../world/chunkKey';
 import type { Materials } from './materials';
 import type { BuiltChunk, MeshArrays } from './ChunkMesh';
@@ -30,6 +30,7 @@ export class ChunkRenderer {
     g.setAttribute('uv', new THREE.BufferAttribute(a.uvs, 2));
     g.setAttribute('light', new THREE.BufferAttribute(a.light, 3));
     g.setAttribute('wave', new THREE.BufferAttribute(a.wave, 1));
+    g.setAttribute('refl', new THREE.BufferAttribute(a.refl, 1));
     g.setIndex(new THREE.BufferAttribute(a.indices, 1)); // Uint32 (chunks exceed 65k verts)
     g.computeBoundingSphere();
     return g;
@@ -68,7 +69,16 @@ export class ChunkRenderer {
     const mesh = new THREE.Mesh(geom, material);
     mesh.position.set(cx * CX, 0, cz * CZ); // local geometry coords + chunk offset
     mesh.frustumCulled = true;
-    if (pass === 'transparent') mesh.renderOrder = 1;
+    if (pass === 'transparent') {
+      mesh.renderOrder = 1;
+      // Transparent (water/glass) lives ONLY on the transparent layer so the
+      // planar-reflection camera (default mask) never reflects the water itself.
+      // The main camera enables this layer (see main.ts) to keep seeing it.
+      mesh.layers.set(LAYER_TRANSPARENT);
+    } else {
+      // Opaque chunks also cast sun shadows -> add the shadow-caster layer.
+      mesh.layers.enable(LAYER_SHADOW_CASTER);
+    }
     this.scene.add(mesh);
     entry[pass] = mesh;
   }

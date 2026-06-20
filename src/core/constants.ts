@@ -110,3 +110,23 @@ export const FOG_DENSITY_NIGHT = 0.02;
 export const RENDER_DISTANCE_LOW = 5;
 export const RENDER_DISTANCE_MED = 8; // == RENDER_DISTANCE (Medium holds 60fps)
 export const RENDER_DISTANCE_CINEMATIC = 11;
+
+// ---------------------------------------------------------------------------
+// Phase 4b: dynamic sun shadows + reflective water (Cinematic only).
+// ---------------------------------------------------------------------------
+// Render layers. Opaque chunks live on DEFAULT (+ SHADOW_CASTER so the sun-depth
+// pass sees only them); transparent (water/glass) chunks live ONLY on TRANSPARENT
+// so the planar-reflection camera (DEFAULT mask) never reflects the water itself.
+export const LAYER_DEFAULT = 0;
+export const LAYER_TRANSPARENT = 1;
+export const LAYER_SHADOW_CASTER = 2;
+
+export const SHADOW_MAP_SIZE = 2048;
+export const SHADOW_CASCADE0 = 32; // near cascade box half-extent (blocks) -> crisp
+export const SHADOW_CASCADE1 = 96; // far cascade box half-extent (blocks)
+export const SHADOW_CAM_DIST = 240; // light cam distance from box center along sunDir
+export const SHADOW_DEPTH = 520; // ortho far plane (covers full vertical caster spread)
+export const SHADOW_STRENGTH = 0.55; // how dark fully-shadowed sky light gets
+
+export const WATER_SURFACE_Y = SEA_LEVEL + 1; // every water top-face sits here
+export const REFLECT_DOWNSCALE = 0.5; // planar reflection render-target scale
