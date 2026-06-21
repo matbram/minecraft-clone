@@ -19,6 +19,7 @@ export class Chunk {
   // 0 = source/full (the default, correct for worldgen lakes). See core/fluid.ts.
   fluid: Uint8Array; // length BLOCKS
   heightMap: Uint8Array; // length COLS: 1 + topmost non-air y per column (0 if empty column)
+  biomeMap: Uint8Array; // length COLS: biome id per column (Phase 12; mesh tint + spawns)
   maxY: number; // chunk-wide topmost non-air y + 1 (mesh skip-empty bound)
 
   dirty = true; // needs (re)mesh
@@ -32,16 +33,22 @@ export class Chunk {
     maxY?: number,
     light?: Uint8Array,
     fluid?: Uint8Array,
+    biomeMap?: Uint8Array,
   ) {
     this.cx = cx;
     this.cz = cz;
     this.data = data ?? new Uint8Array(BLOCKS);
     this.heightMap = heightMap ?? new Uint8Array(COLS);
+    this.biomeMap = biomeMap ?? new Uint8Array(COLS); // 0 = PLAINS (neutral tint) by default
     this.maxY = maxY ?? 0;
     // Light is all-zero (dark) until LightEngine.initChunkLight computes it.
     this.light = light ?? new Uint8Array(BLOCKS);
     // Fluid is all-zero = all sources; correct for worldgen water at equilibrium.
     this.fluid = fluid ?? new Uint8Array(BLOCKS);
+  }
+
+  getBiome(lx: number, lz: number): number {
+    return this.biomeMap[colIdx(lx, lz)];
   }
 
   getBlock(lx: number, y: number, lz: number): Block {

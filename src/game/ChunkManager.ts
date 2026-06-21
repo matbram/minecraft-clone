@@ -151,7 +151,8 @@ export class ChunkManager {
   private onChunk(resp: GenResponse): void {
     const data = new Uint8Array(resp.data);
     const heightMap = new Uint8Array(resp.heightMap);
-    const chunk = new Chunk(resp.cx, resp.cz, data, heightMap, resp.maxY);
+    const biomeMap = new Uint8Array(resp.biomeMap);
+    const chunk = new Chunk(resp.cx, resp.cz, data, heightMap, resp.maxY, undefined, undefined, biomeMap);
 
     this.world.addChunk(chunk);
     this.world.applyEdits(chunk); // 1. player deltas win over generation

@@ -17,6 +17,7 @@ export interface GenResponse {
   cz: number;
   data: ArrayBuffer; // transferred Uint8Array(BLOCKS).buffer
   heightMap: ArrayBuffer; // transferred Uint8Array(COLS).buffer
+  biomeMap: ArrayBuffer; // transferred Uint8Array(COLS).buffer (biome id per column)
   maxY: number;
   features: FeatureDecision[]; // small plain objects -> structured clone
 }

@@ -19,9 +19,12 @@ for (const [cx, cz] of [
   const a = generateChunk(cx, cz, SEED);
   const b = generateChunk(cx, cz, SEED);
   const dataSame = eqBytes(a.data, b.data);
+  const biomeSame = eqBytes(a.biomeMap, b.biomeMap);
   const featSame = JSON.stringify(a.features) === JSON.stringify(b.features);
-  console.log(`chunk ${cx},${cz}: data=${dataSame} features=${featSame} (${a.features.length} features)`);
-  if (!dataSame || !featSame) ok = false;
+  console.log(
+    `chunk ${cx},${cz}: data=${dataSame} biome=${biomeSame} features=${featSame} (${a.features.length} features)`,
+  );
+  if (!dataSame || !biomeSame || !featSame) ok = false;
 }
 
 // Different seed should differ.

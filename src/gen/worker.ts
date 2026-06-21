@@ -15,6 +15,7 @@ ctx.onmessage = (e: MessageEvent<GenRequest>) => {
 
   const dataBuf = r.data.buffer as ArrayBuffer;
   const heightBuf = r.heightMap.buffer as ArrayBuffer;
+  const biomeBuf = r.biomeMap.buffer as ArrayBuffer;
 
   const msg: GenResponse = {
     id,
@@ -22,11 +23,12 @@ ctx.onmessage = (e: MessageEvent<GenRequest>) => {
     cz,
     data: dataBuf,
     heightMap: heightBuf,
+    biomeMap: biomeBuf,
     maxY: r.maxY,
     features: r.features,
   };
 
-  // Transfer the two buffers (zero-copy). They are detached here afterward,
+  // Transfer the buffers (zero-copy). They are detached here afterward,
   // which is fine — this request is done with them.
-  ctx.postMessage(msg, [dataBuf, heightBuf]);
+  ctx.postMessage(msg, [dataBuf, heightBuf, biomeBuf]);
 };

@@ -21,6 +21,7 @@ export enum Block {
   COAL_ORE,
   IRON_ORE,
   GOLD_ORE,
+  SNOW, // Phase 12: snowy-biome surface + mountain caps
   // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
   // generated, or saved. It exists only so survival has an edible to refill hunger.
   APPLE,
@@ -62,9 +63,10 @@ export const Tile = {
   COAL_ORE: 13,
   IRON_ORE: 14,
   GOLD_ORE: 15,
+  SNOW: 16,
 } as const;
 
-export const ATLAS_TILES = 16; // number of distinct tiles (also the atlas grid is 16 wide)
+export const ATLAS_TILES = 17; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -158,6 +160,7 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.COAL_ORE, Tile.COAL_ORE);
   setAllFaces(Block.IRON_ORE, Tile.IRON_ORE);
   setAllFaces(Block.GOLD_ORE, Tile.GOLD_ORE);
+  setAllFaces(Block.SNOW, Tile.SNOW);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -186,6 +189,7 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.IRON_ORE] = 2.0;
   HARDNESS[Block.GOLD_ORE] = 2.0;
   HARDNESS[Block.GLOWSTONE] = 2.0;
+  HARDNESS[Block.SNOW] = 0.5;
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -210,6 +214,7 @@ export const PLACEABLE: Block[] = [
   Block.COAL_ORE,
   Block.IRON_ORE,
   Block.GOLD_ORE,
+  Block.SNOW,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).

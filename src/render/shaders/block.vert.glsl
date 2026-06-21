@@ -7,6 +7,7 @@
 attribute vec3 light;
 attribute float wave;
 attribute float refl;
+attribute vec3 tint; // Phase 12: per-vertex biome colour multiplier (1,1,1 = none)
 
 uniform float uTime;
 uniform float uWind;
@@ -20,10 +21,12 @@ varying vec3 vWorldPos;    // Phase 4b: shadow projection + water Fresnel
 varying vec3 vWorldNormal; // Phase 4b: chunk model matrix is translation-only
 varying float vReflect;
 varying vec4 vReflectCoord;
+varying vec3 vTint;
 
 void main() {
   vUv = uv;
   vLight = light;
+  vTint = tint;
 
   vec3 pos = position;
   if (wave > 0.5 && uWind > 0.0) {

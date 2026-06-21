@@ -11,6 +11,7 @@
 import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
 import { Tunables } from '../core/tunables';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
+import { BIOMES, type Biome } from '../core/biome';
 import { fluidSurfaceHeight } from '../core/fluid';
 import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
@@ -24,6 +25,7 @@ export interface MeshArrays {
   uvs: Float32Array;
   wave: Float32Array; // 1 float/vertex: 1 = foliage (waves), 0 = static
   refl: Float32Array; // 1 float/vertex: 1 = reflective water top face, 0 = other
+  tint: Float32Array; // 3 floats/vertex: biome colour multiplier (1,1,1 = none)
   indices: Uint32Array;
 }
 
@@ -71,12 +73,13 @@ interface Accum {
   uvs: number[];
   wave: number[];
   refl: number[];
+  tint: number[];
   indices: number[];
   count: number;
 }
 
 function newAccum(): Accum {
-  return { positions: [], normals: [], light: [], uvs: [], wave: [], refl: [], indices: [], count: 0 };
+  return { positions: [], normals: [], light: [], uvs: [], wave: [], refl: [], tint: [], indices: [], count: 0 };
 }
 
 function finalize(a: Accum): MeshArrays | null {
@@ -88,6 +91,7 @@ function finalize(a: Accum): MeshArrays | null {
     uvs: new Float32Array(a.uvs),
     wave: new Float32Array(a.wave),
     refl: new Float32Array(a.refl),
+    tint: new Float32Array(a.tint),
     indices: new Uint32Array(a.indices),
   };
 }
@@ -162,6 +166,10 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const wz = baseZ + lz;
         const acc = NEEDS_BLEND.has(b) ? transparent : opaque;
         const waveFlag = IS_FOLIAGE[b] ? 1 : 0;
+        // Biome colour for this column (only grass tops + leaves use it; see per face).
+        const bdef = BIOMES[self.getBiome(lx, lz) as Biome];
+        const isLeaves = b === Block.LEAVES;
+        const isGrass = b === Block.GRASS;
 
         // Phase 11.1/11.4: sky light is absorbed passing DOWN through water, so deeper
         // submerged surfaces get darker (real underwater falloff). Baked into the sky
@@ -221,6 +229,21 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           // surface (face 2 = +Y, y === SEA_LEVEL -> top at WATER_SURFACE_Y). Only
           // full sources (fluid===0) keep the reflection plane aligned.
           const reflFlag = isWater && f === 2 && y === SEA_LEVEL && selfFluid === 0 ? 1 : 0;
+
+          // Biome tint: grass TOP faces + all leaf faces shift toward the biome
+          // palette; every other face stays neutral (1,1,1).
+          let tr = 1;
+          let tg = 1;
+          let tb = 1;
+          if (isLeaves) {
+            tr = bdef.foliageTint[0];
+            tg = bdef.foliageTint[1];
+            tb = bdef.foliageTint[2];
+          } else if (isGrass && f === 2) {
+            tr = bdef.grassTint[0];
+            tg = bdef.grassTint[1];
+            tb = bdef.grassTint[2];
+          }
 
           const tile = tileOf(b, f);
           const col = tile % ATLAS_COLS;
@@ -292,6 +315,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
             acc.wave.push(waveFlag);
             acc.refl.push(reflFlag);
+            acc.tint.push(tr, tg, tb);
           }
 
           // Flip the quad diagonal to avoid AO interpolation artifacts.

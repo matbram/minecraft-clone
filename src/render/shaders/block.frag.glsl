@@ -38,6 +38,7 @@ varying vec3 vWorldPos;
 varying vec3 vWorldNormal;
 varying float vReflect;
 varying vec4 vReflectCoord;
+varying vec3 vTint;
 
 const float SHADOW_BIAS = 0.0009;
 
@@ -115,7 +116,7 @@ void main() {
     lit += vec3(c * up * vLight.x * uDayFactor * 0.22 * (1.0 - uUnderwaterDepth));
   }
 
-  vec3 color = tex.rgb * lit;
+  vec3 color = tex.rgb * lit * vTint; // vTint = biome colour (1,1,1 on non-foliage)
   float outA = tex.a;
 
   // Planar reflective water (top faces only; vReflect baked at mesh time).

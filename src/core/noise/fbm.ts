@@ -55,3 +55,21 @@ export function ridged3(x: number, y: number, z: number, seed: number, frequency
   const n = noise3(x * frequency, y * frequency, z * frequency, seed);
   return 1 - Math.abs(n); // peaks (~1) along the zero-crossing surface of the noise
 }
+
+// 2D ridged multifractal -> ~[0,1] with sharp mountain ridges (squared per octave).
+// Used by the biome system to raise mountain peaks where "mountainousness" is high.
+export function ridged2(x: number, z: number, seed: number, opts: Partial<FbmOptions> = {}): number {
+  const o = { ...DEFAULTS, ...opts };
+  let freq = o.frequency;
+  let amp = 1;
+  let sum = 0;
+  let norm = 0;
+  for (let i = 0; i < o.octaves; i++) {
+    const n = 1 - Math.abs(noise2(x * freq, z * freq, seed + i * 1013));
+    sum += amp * n * n; // square -> sharper ridges
+    norm += amp;
+    freq *= o.lacunarity;
+    amp *= o.gain;
+  }
+  return sum / norm;
+}
