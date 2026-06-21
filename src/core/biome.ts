@@ -50,7 +50,7 @@ export interface WorldFields {
 }
 
 // --- tuning ----------------------------------------------------------------
-const CONTINENT_BIAS = -0.1; // shifts the sea crossover; tuned for ~30-40% ocean.
+const CONTINENT_BIAS = 0.05; // shifts the sea crossover; tuned for ~40% ocean.
 const RIVER_WIDTH = 0.045; // noise units; larger = wider rivers
 const RIVER_MAX_LAND = 18; // only carve rivers where the land base is below SEA_LEVEL+this
 const LAPSE = 0.005; // temperature drop per block of elevation above sea (≈ real lapse)
@@ -58,14 +58,16 @@ export const MOUNTAIN_Y = 98; // surface at/above this Y reads as MOUNTAIN biome
 export const MOUNTAIN_STONE_Y = 106; // bare rock above this
 export const MOUNTAIN_SNOW_Y = 118; // snow-capped above this
 
-// continentalness -> base land/sea height. Crossover (= SEA_LEVEL) sits near C≈-0.1 so a
-// minority of the map is ocean, but with deep basins and shallow shelves. Inland base stays
-// moderate; mountains come from the (upward-only) ridge term below.
-const C_XS = [-1.0, -0.5, -0.3, -0.15, -0.05, 0.1, 0.4, 0.7, 1.0];
-const C_YS = [26, 38, 50, 58, 63, 69, 78, 88, 96];
+// continentalness -> base land/sea height. Crossover (= SEA_LEVEL) sits near C≈0 so ~40%
+// of the map is ocean. Ocean side drops DEEP (real basins) while keeping shallow sandy
+// shelves near coasts; inland base stays moderate (mountains come from the ridge term).
+const C_XS = [-1.0, -0.6, -0.35, -0.18, -0.06, 0.08, 0.35, 0.65, 1.0];
+const C_YS = [12, 24, 40, 54, 60, 66, 77, 88, 96];
 // erosion -> mountain ridge amplitude (low erosion = tall ranges; high = flat plains).
 const E_XS = [-1.0, -0.4, 0.0, 0.4, 1.0];
 const E_YS = [130, 80, 42, 14, 4];
+// Abyssal trenches: a sparse ridged field gouges open-ocean floors toward bedrock.
+const TRENCH_DEPTH = 42;
 
 function smoothstep(a: number, b: number, x: number): number {
   const t = Math.max(0, Math.min(1, (x - a) / (b - a)));
@@ -116,6 +118,14 @@ export function terrainHeight(wx: number, wz: number, seed: number, f: WorldFiel
 
   const detail = fbm2(wx, wz, seed + 13, { frequency: 1 / 40, octaves: 2, lacunarity: 2, gain: 0.5 }) * 3;
   let h = land + mountains + detail;
+
+  // Abyssal trenches: gouge open-ocean floors (low landMask) toward bedrock where a sparse
+  // ridged field peaks -> dramatic deeps. Squared gate keeps them rare/localized.
+  if (landMask < 0.5) {
+    const tr = ridged2(wx, wz, seed + 5000, { frequency: 1 / 300, octaves: 3, lacunarity: 2, gain: 0.5 });
+    const trench = smoothstep(0.5, 0.85, tr);
+    h -= trench * trench * TRENCH_DEPTH * (1 - landMask);
+  }
 
   // Rivers: carve a channel toward sea level, but only in lowland land (not mountains),
   // so they connect to the ocean instead of floating on peaks.

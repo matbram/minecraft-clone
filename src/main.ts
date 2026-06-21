@@ -55,6 +55,7 @@ import { UnderwaterOverlay } from './ui/UnderwaterOverlay';
 import { UnderwaterParticles } from './render/UnderwaterParticles';
 import { BubbleParticles } from './render/BubbleParticles';
 import { WaterCeiling } from './render/WaterCeiling';
+import { Fauna } from './world/Fauna';
 import { Settings } from './ui/Settings';
 import { PauseMenu } from './ui/PauseMenu';
 import { Survival } from './player/Survival';
@@ -193,6 +194,7 @@ const interaction = new Interaction(world, input, player, hotbar, outline, break
 
 // --- feel FX (Phase 2) -----------------------------------------------------
 const effects = new Effects(scene, world, input, player, atlas);
+const fauna = new Fauna(scene, world); // Phase 12c: wandering biome creatures
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -506,6 +508,7 @@ function frame(now: number): void {
   // match the real light and don't glow in the dark). Mirrors the shader's sky term.
   const fxSkyMul = Math.max(dayNight.dayFactor, dayNight.moonFactor, dayNight.nightAmbient);
   effects.update(frameDt, camera, fxSkyMul); // sets sprint FOV + applies view-bob to camera
+  fauna.update(frameDt, player.pos, fxSkyMul); // wandering creatures (cosmetic)
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the

@@ -230,7 +230,13 @@ export function generateChunk(cx: number, cz: number, seed: number): GenResult {
 
         // Carve caves out of solid ground (never bedrock, never the very surface).
         if (b !== Block.BEDROCK && y < h && y > BEDROCK_Y && isCave(wx, y, wz, seed)) {
-          continue; // leave as AIR
+          // Below sea level under the ocean, flooded caverns connect to the sea
+          // (aquifer-style ocean caves); land caves above the sea stay dry.
+          if (underwater && y < SEA_LEVEL) {
+            data[idx(lx, y, lz)] = Block.WATER;
+            if (y > columnTop) columnTop = y;
+          }
+          continue; // otherwise leave as AIR
         }
 
         data[idx(lx, y, lz)] = b;

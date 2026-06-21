@@ -76,6 +76,7 @@ console.log(`wall stop: x=${pw.pos.x.toFixed(3)} (block at x=${wallX}) -> ${wall
 pass &&= wallOk;
 
 // 5. Raycast straight down hits the surface cell with an upward face normal.
+world.editBlock(bx, h + 1, bz, 0); // clear any decorative plant so the ray reaches ground
 const hit = raycastVoxel(world, new THREE.Vector3(bx + 0.5, h + 5, bz + 0.5), new THREE.Vector3(0, -1, 0), 20);
 const rayOk = !!hit && hit.cell.y === h && hit.normal.y === 1 && hit.place.y === h + 1;
 console.log(`raycast down: ${hit ? `cell.y=${hit.cell.y} normal.y=${hit.normal.y}` : 'null'} -> ${rayOk ? 'OK' : 'FAIL'}`);
