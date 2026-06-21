@@ -16,7 +16,11 @@ check('noon horizon == day blue 0x8fc6f0', noon.horizon.getHex() === 0x8fc6f0, n
 check('noon stars hidden', noon.starOpacity < 0.01, noon.starOpacity.toFixed(2));
 
 const midnight = new DayNight(480, 0.0);
-check('midnight dayFactor floor ~ 0.12', Math.abs(midnight.dayFactor - 0.12) < 0.01, midnight.dayFactor.toFixed(2));
+// Phase 11.0/11.1 removed the dayFactor floor (strict source-only light): at deep
+// midnight the directional day factor is 0 and the faint skyglow floor lives in
+// nightAmbient instead, so moon shadows can darken below it.
+check('midnight dayFactor 0 (no floor)', midnight.dayFactor < 0.01, midnight.dayFactor.toFixed(2));
+check('midnight nightAmbient floor ~ 0.1', Math.abs(midnight.nightAmbient - 0.1) < 0.01, midnight.nightAmbient.toFixed(2));
 check('midnight sun below horizon', !midnight.sunAboveHorizon, midnight.sunAboveHorizon);
 check('midnight stars visible', midnight.starOpacity > 0.9, midnight.starOpacity.toFixed(2));
 
@@ -24,6 +28,18 @@ check('midnight stars visible', midnight.starOpacity > 0.9, midnight.starOpacity
 const d = new DayNight(10, 0.0);
 d.update(2.5); // quarter cycle -> dawn-ish
 check('cycle advances phase', Math.abs(d.phase - 0.25) < 1e-6, d.phase.toFixed(3));
+
+// Phase 12.5: visual moon phase. moonLightDir is a unit vector lighting the moon
+// sphere; at full moon (moonPhase 0.5) the lit hemisphere faces the viewer (-moonDir),
+// at new moon (0.0) it faces away (+moonDir). Stable regardless of time of day.
+const mp = new DayNight(480, 0.0);
+mp.moonPhase = 0.5;
+mp.update(0); // recompute with the set phase
+check('moonLightDir is unit', Math.abs(mp.moonLightDir.length() - 1) < 1e-3, mp.moonLightDir.length().toFixed(3));
+check('full moon: lit faces viewer', mp.moonLightDir.dot(mp.moonDir) < -0.99, mp.moonLightDir.dot(mp.moonDir).toFixed(2));
+mp.moonPhase = 0.0;
+mp.update(0);
+check('new moon: lit faces away', mp.moonLightDir.dot(mp.moonDir) > 0.99, mp.moonLightDir.dot(mp.moonDir).toFixed(2));
 
 // Presets cycle Low -> Medium -> Cinematic -> Low.
 check('nextPreset LOW->MEDIUM', nextPreset(Preset.LOW) === Preset.MEDIUM, nextPreset(Preset.LOW));

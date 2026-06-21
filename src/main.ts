@@ -20,6 +20,10 @@ import {
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
+  CAMERA_NEAR,
+  CAMERA_FAR,
+  SPACE_START_Y,
+  SPACE_FULL_Y,
   worldToChunk,
 } from './core/constants';
 import { Tunables } from './core/tunables';
@@ -158,7 +162,9 @@ renderer.domElement.addEventListener('webglcontextlost', (e) => {
 const scene = new THREE.Scene();
 // Sky dome (Phase 4a) replaces the flat background; clear color is a fallback.
 
-const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+// Far plane is large (Phase 12.5) so the distant sun/moon + planet backdrop fit;
+// near is nudged up a touch to keep terrain depth precision across that range.
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR);
 // Transparent (water/glass) chunks live only on LAYER_TRANSPARENT so the planar
 // reflection camera won't reflect the water; the main camera must opt back in.
 camera.layers.enable(LAYER_TRANSPARENT);
@@ -592,6 +598,9 @@ function frame(now: number): void {
   clouds.setVisible(settings.clouds);
   stars.setVisible(settings.stars);
 
+  // Phase 12.5: how far into space we are (0 at/below the build top, 1 in full space).
+  const altT = THREE.MathUtils.smoothstep(camera.position.y, SPACE_START_Y, SPACE_FULL_Y);
+
   sky.update(camera.position, dayNight);
   sunMoon.update(camera.position, dayNight);
   clouds.update(camera.position, dayNight, frameDt);
@@ -605,13 +614,21 @@ function frame(now: number): void {
   sunMoon.setUnderwaterFade(lightFade);
   stars.setUnderwaterFade(hideFade);
   clouds.setUnderwaterFade(hideFade);
+  // Phase 12.5 — space transition (call AFTER the underwater fades): sky -> black,
+  // stars in by day, local clouds out, atmospheric halos out. No-op at the surface.
+  sky.setSpace(altT);
+  stars.setSpace(altT);
+  clouds.setSpace(altT);
+  sunMoon.setSpace(altT);
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;
   materials.shared.uMoonFactor.value = dayNight.moonFactor;
   materials.shared.uNightAmbient.value = dayNight.nightAmbient;
   materials.shared.uFogColor.value.copy(dayNight.fogColor);
-  materials.shared.uFogDensity.value = dayNight.fogDensity;
+  // Fog opens up as the atmosphere thins with altitude, so the world doesn't fog
+  // out when seen from space (and you can see the curved planet/limb below).
+  materials.shared.uFogDensity.value = dayNight.fogDensity * (1 - altT);
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
 
@@ -693,6 +710,8 @@ function frame(now: number): void {
         tmpSunUv.x += Math.sin(now / 1000 * 0.6) * 0.03;
         intensity *= 1 + 0.4 * uwBright;
       }
+      // No atmosphere to scatter in vacuum: the shafts fade out as you reach space.
+      intensity *= 1 - altT;
       composer.updateGodRays(tmpSunUv, vis, intensity);
     }
     composer.render();

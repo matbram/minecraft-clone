@@ -42,7 +42,7 @@ export class Stars {
     });
     this.points = new THREE.Points(geo, this.mat);
     this.points.frustumCulled = false;
-    this.points.renderOrder = -1;
+    this.points.renderOrder = -3; // behind the planet (-2) and sun/moon (-1), over the sky dome (-4)
     scene.add(this.points);
   }
 
@@ -50,6 +50,13 @@ export class Stars {
     this.points.position.copy(camPos);
     this.mat.opacity = day.starOpacity;
     this.points.visible = this.enabled && day.starOpacity > 0.01;
+  }
+
+  // Phase 12.5 — space: stars fade IN with altitude regardless of time of day, so
+  // they're out even in daytime space. Call AFTER update(); altT=0 is a no-op.
+  setSpace(altT: number): void {
+    this.mat.opacity = Math.max(this.mat.opacity, altT);
+    this.points.visible = this.enabled && this.mat.opacity > 0.01;
   }
 
   setVisible(v: boolean): void {

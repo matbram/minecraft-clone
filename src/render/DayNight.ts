@@ -9,6 +9,7 @@ import {
   FOG_DENSITY_DAY,
   FOG_DENSITY_NIGHT,
   MOON_LIGHT_STRENGTH,
+  MOON_SYNODIC_DAYS,
   NIGHT_AMBIENT,
 } from '../core/constants';
 
@@ -46,6 +47,11 @@ export class DayNight {
 
   readonly sunDir = new THREE.Vector3(0, 1, 0);
   readonly moonDir = new THREE.Vector3(0, -1, 0);
+  // Phase 12.5: the moon's body is lit by this direction so it shows a real,
+  // waxing/waning PHASE. Visual only — decoupled from moonDir/moonFactor so the
+  // night-time WORLD lighting is unchanged. moonPhase sweeps a synodic cycle.
+  moonPhase = 0.5; // 0=new, 0.5=full
+  readonly moonLightDir = new THREE.Vector3();
   readonly zenith = new THREE.Color();
   readonly horizon = new THREE.Color();
   readonly fogColor = new THREE.Color();
@@ -73,6 +79,9 @@ export class DayNight {
     if (!this.paused) {
       this.phase = (this.phase + dt / this.cycle) % 1;
       if (this.phase < 0) this.phase += 1;
+      // The moon's visual phase drifts over many days (synodic cycle).
+      this.moonPhase = (this.moonPhase + dt / (this.cycle * MOON_SYNODIC_DAYS)) % 1;
+      if (this.moonPhase < 0) this.moonPhase += 1;
     }
     this.recompute();
   }
@@ -108,6 +117,20 @@ export class DayNight {
     this.sunDir.set(Math.cos(theta), Math.sin(theta), Math.cos(theta) * 0.35).normalize();
     this.moonDir.copy(this.sunDir).multiplyScalar(-1);
 
+    // Visual moon phase: light direction (toward the light) for the lit moon sphere.
+    // Build it in the plane spanned by the view-to-moon axis (moonDir) and a stable
+    // perpendicular, swept by moonPhase: phase 0.5 (full) → toward the camera (-moonDir),
+    // phase 0 (new) → away (moonDir), quarter → perpendicular. Stable as you turn/fly.
+    const mph = this.moonPhase * Math.PI * 2;
+    _right.copy(WORLD_UP).cross(this.moonDir);
+    if (_right.lengthSq() < 1e-4) _right.set(1, 0, 0);
+    _right.normalize();
+    this.moonLightDir
+      .copy(this.moonDir)
+      .multiplyScalar(Math.cos(mph))
+      .addScaledVector(_right, Math.sin(mph))
+      .normalize();
+
     this.sampleStops(e, 'zen', this.zenith);
     this.sampleStops(e, 'hor', this.horizon);
     this.sampleStops(e, 'warm', this.sunColor); // warm horizon color (glow + fog)
@@ -141,3 +164,5 @@ export class DayNight {
 const WHITE = new THREE.Color(0xffffff);
 const WARM_LIGHT = new THREE.Color(1.0, 0.62, 0.36); // golden-hour directional light
 const MOON_COOL = new THREE.Color(0.55, 0.68, 1.0); // cool moonlight
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+const _right = new THREE.Vector3();

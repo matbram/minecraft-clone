@@ -22,6 +22,7 @@ export class Sky {
         uSunGlow: { value: 0 },
         uWaterColor: { value: new THREE.Color(0x0a2230) },
         uWaterFade: { value: 0 },
+        uSpace: { value: 0 }, // Phase 12.5: gradient -> black as you fly to space
       },
       vertexShader: vert,
       fragmentShader: frag,
@@ -32,7 +33,7 @@ export class Sky {
     });
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = -1;
+    this.mesh.renderOrder = -4;
     scene.add(this.mesh);
   }
 
@@ -51,6 +52,12 @@ export class Sky {
   setUnderwater(fade: number, color: THREE.Color): void {
     this.mat.uniforms.uWaterFade.value = fade;
     (this.mat.uniforms.uWaterColor.value as THREE.Color).copy(color);
+  }
+
+  // Phase 12.5 — space: fade the gradient toward black as altitude rises (altT
+  // 0 at ground -> 1 in full space). At altT=0 the surface sky is untouched.
+  setSpace(altT: number): void {
+    this.mat.uniforms.uSpace.value = altT;
   }
 
   setVisible(v: boolean): void {

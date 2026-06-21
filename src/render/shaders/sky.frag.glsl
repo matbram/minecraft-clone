@@ -6,6 +6,7 @@ uniform vec3 uSunColor;
 uniform float uSunGlow;
 uniform vec3 uWaterColor; // Phase 10 — underwater: sky fades to deep water with depth
 uniform float uWaterFade; // 0 above water / at the surface -> 1 deep
+uniform float uSpace;     // Phase 12.5 — 0 at ground -> 1 in space (gradient -> black)
 varying vec3 vDir;
 void main() {
   vec3 dir = normalize(vDir);
@@ -24,6 +25,9 @@ void main() {
   // Underwater: the sky (and its sun glow) is absorbed by the water with depth, so
   // near the surface you still see the sky/sun and deep it fades to dark water.
   col = mix(col, uWaterColor, uWaterFade);
+
+  // Space: the atmosphere thins out with altitude, so the gradient fades to black.
+  col = mix(col, vec3(0.0), uSpace);
 
   gl_FragColor = vec4(col, 1.0);
 }

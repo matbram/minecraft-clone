@@ -119,6 +119,29 @@ export const MOON_SHADOW_STRENGTH = 0.35; // softer than the sun's SHADOW_STRENG
 export const NIGHT_AMBIENT = 0.1; // unshadowed night skyglow floor
 export const MOON_TINT = 0xb3ccff; // cool blue cast applied to moonlit surfaces
 
+// ---------------------------------------------------------------------------
+// Phase 12.5: space layer. Flying very high transitions the flat world to space
+// (sky → black, stars in by day, fog opens up) with physical 3D sun/moon and a
+// curved planet backdrop. altT = smoothstep(SPACE_START_Y, SPACE_FULL_Y, camY);
+// at altT=0 (ground) every space effect is a no-op so the surface look is unchanged.
+// ---------------------------------------------------------------------------
+export const SPACE_START_Y = 320; // altitude where the space transition begins (above the build top)
+export const SPACE_FULL_Y = 1500; // altitude of full space (black sky, full stars, planet visible)
+export const CAMERA_NEAR = 0.25; // near plane (nudged up from 0.1 for z-precision with the big far)
+export const CAMERA_FAR = 12000; // far plane (was 1000) so the distant sun/moon + planet fit in clip space
+// Physical sun/moon: real 3D spheres at a large finite offset from the camera
+// (they read as distant bodies; sizes tuned so the ground-level apparent size ≈ the old sprites).
+export const SUN_DIST = 4000;
+export const MOON_DIST = 3800;
+export const SUN_RADIUS = 175;
+export const MOON_RADIUS = 150;
+export const SUN_GLOW_SCALE = 1300; // additive halo sprite size (atmospheric glow; fades in vacuum)
+export const MOON_GLOW_SCALE = 750;
+export const MOON_SYNODIC_DAYS = 8; // in-game days for one full lunar phase cycle (visual only)
+// Planet backdrop (Stage 12.5b).
+export const PLANET_R = 6000; // planet sphere radius (surface aligned near sea level below the camera)
+export const PLANET_ATMOSPHERE = 1.035; // atmosphere shell radius as a multiple of PLANET_R
+
 export const RENDER_DISTANCE_LOW = 5;
 export const RENDER_DISTANCE_MED = 8; // == RENDER_DISTANCE (Medium holds 60fps)
 export const RENDER_DISTANCE_CINEMATIC = 11;

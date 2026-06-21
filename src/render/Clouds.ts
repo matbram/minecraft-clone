@@ -63,6 +63,7 @@ export class Clouds {
     const tex = this.mat.map!;
     tex.offset.set(this.offset, this.offset * 0.6);
     this.mat.color.copy(day.cloudTint);
+    this.mat.opacity = 0.85; // base; fades below multiply this (call them AFTER update)
   }
 
   setVisible(v: boolean): void {
@@ -71,6 +72,12 @@ export class Clouds {
 
   // Phase 10 — underwater: clouds fade with depth (call AFTER update()).
   setUnderwaterFade(fade: number): void {
-    this.mat.opacity = 0.85 * (1 - fade);
+    this.mat.opacity *= 1 - fade;
+  }
+
+  // Phase 12.5 — space: you rise above the local cloud plane, so it fades out
+  // (the planet's own clouds take over). Call AFTER update(); altT=0 is a no-op.
+  setSpace(altT: number): void {
+    this.mat.opacity *= 1 - altT;
   }
 }
