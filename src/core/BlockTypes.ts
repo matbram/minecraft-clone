@@ -37,6 +37,10 @@ export enum Block {
   DEAD_BUSH,
   SUGAR_CANE,
   CACTUS,
+  // Phase 12d: ocean flora (cross-billboard, live underwater).
+  KELP,
+  SEAGRASS,
+  CORAL,
   // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
   // generated, or saved. It exists only so survival has an edible to refill hunger.
   APPLE,
@@ -92,9 +96,12 @@ export const Tile = {
   DEAD_BUSH: 27,
   SUGAR_CANE: 28,
   CACTUS: 29,
+  KELP: 30,
+  SEAGRASS: 31,
+  CORAL: 32,
 } as const;
 
-export const ATLAS_TILES = 30; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
+export const ATLAS_TILES = 33; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -142,7 +149,7 @@ export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
   IS_FOLIAGE[Block.LEAVES] = 1;
 
   // Phase 12b flora. Cross plants: non-solid, transparent (don't cull neighbors), wave.
-  for (const p of [Block.TALL_GRASS, Block.FERN, Block.FLOWER_RED, Block.FLOWER_YELLOW, Block.DEAD_BUSH, Block.SUGAR_CANE]) {
+  for (const p of [Block.TALL_GRASS, Block.FERN, Block.FLOWER_RED, Block.FLOWER_YELLOW, Block.DEAD_BUSH, Block.SUGAR_CANE, Block.KELP, Block.SEAGRASS, Block.CORAL]) {
     IS_CROSS[p] = 1;
     IS_SOLID[p] = 0;
     IS_TRANSPARENT[p] = 1;
@@ -219,6 +226,9 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.DEAD_BUSH, Tile.DEAD_BUSH);
   setAllFaces(Block.SUGAR_CANE, Tile.SUGAR_CANE);
   setAllFaces(Block.CACTUS, Tile.CACTUS);
+  setAllFaces(Block.KELP, Tile.KELP);
+  setAllFaces(Block.SEAGRASS, Tile.SEAGRASS);
+  setAllFaces(Block.CORAL, Tile.CORAL);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -261,6 +271,9 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.DEAD_BUSH] = 0;
   HARDNESS[Block.SUGAR_CANE] = 0;
   HARDNESS[Block.CACTUS] = 0.4;
+  HARDNESS[Block.KELP] = 0;
+  HARDNESS[Block.SEAGRASS] = 0;
+  HARDNESS[Block.CORAL] = 0.3;
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -299,6 +312,9 @@ export const PLACEABLE: Block[] = [
   Block.DEAD_BUSH,
   Block.SUGAR_CANE,
   Block.CACTUS,
+  Block.KELP,
+  Block.SEAGRASS,
+  Block.CORAL,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).

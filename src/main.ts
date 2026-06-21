@@ -19,6 +19,7 @@ import {
   MAX_FLUID_OPS_PER_TICK,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
+  REACH,
   worldToChunk,
 } from './core/constants';
 import { Tunables } from './core/tunables';
@@ -244,6 +245,7 @@ const bubbles = new BubbleParticles(scene); // Phase 11.5: bubbles rising from t
 const waterCeiling = new WaterCeiling(scene); // Phase 11.5b: visible surface from below
 let wasSubmerged = false; // edge-detect surface crossings for the splash
 let splashCooldown = 0; // rate-limits splash so bobbing at the surface doesn't spam
+let attackCooldown = 0; // Phase 12d: melee swing rate-limit
 let bubbleSfxTimer = 0; // throttles occasional bubble blips while submerged
 const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
@@ -509,6 +511,25 @@ function frame(now: number): void {
   const fxSkyMul = Math.max(dayNight.dayFactor, dayNight.moonFactor, dayNight.nightAmbient);
   effects.update(frameDt, camera, fxSkyMul); // sets sprint FOV + applies view-bob to camera
   fauna.update(frameDt, player.pos, fxSkyMul); // wandering creatures (cosmetic)
+
+  // Phase 12d melee: a creature under the crosshair (closer than the aimed block) takes
+  // the hit instead of mining; left-click swings on a short cooldown.
+  const creatureHit = fauna.raycast(camera.position, tmpDir, REACH);
+  let meleeBlocked = false;
+  if (creatureHit) {
+    const tgt = interaction.target;
+    const blockDist = tgt
+      ? Math.hypot(tgt.cell.x + 0.5 - camera.position.x, tgt.cell.y + 0.5 - camera.position.y, tgt.cell.z + 0.5 - camera.position.z)
+      : Infinity;
+    meleeBlocked = creatureHit.dist < blockDist;
+  }
+  interaction.setMeleeBlocked(meleeBlocked);
+  attackCooldown -= frameDt;
+  if (meleeBlocked && creatureHit && input.locked && input.isMouseDown(0) && attackCooldown <= 0) {
+    const res = fauna.hit(creatureHit.idx, camera.position, 4);
+    if (res) (res.killed ? effects.onCreatureDie(res.pos, res.color) : effects.onCreatureHit(res.pos, res.color));
+    attackCooldown = 0.45;
+  }
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the

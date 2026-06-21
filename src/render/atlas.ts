@@ -206,6 +206,45 @@ const PAINTERS: Record<number, Painter> = {
     ctx.fillRect(x0 + 7, y0 + 10, 2, 1);
   },
 
+  // Kelp: tall olive-green strands.
+  [Tile.KELP]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    for (let i = 0; i < 4; i++) {
+      const bx = x0 + 3 + i * 3;
+      const g = 110 + Math.floor(rnd() * 40);
+      ctx.fillStyle = `rgb(70,${g},55)`;
+      ctx.fillRect(bx, y0, 2, TILE_PX);
+      ctx.fillRect(bx - 1, y0 + 3 + ((i * 5) % 10), 4, 2); // leafy bulges
+    }
+  },
+
+  // Seagrass: short bright-green blades.
+  [Tile.SEAGRASS]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    for (let i = 0; i < 7; i++) {
+      const bx = x0 + 1 + i * 2;
+      const top = y0 + 7 + Math.floor(rnd() * 4);
+      ctx.fillStyle = `rgb(60,${150 + Math.floor(rnd() * 50)},90)`;
+      ctx.fillRect(bx, top, 1, y0 + TILE_PX - top);
+    }
+  },
+
+  // Coral: a bright branchy clump (pink/orange).
+  [Tile.CORAL]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    const cols = ['rgb(232,96,140)', 'rgb(240,150,70)', 'rgb(210,90,200)'];
+    const cx = x0 + 8;
+    ctx.fillStyle = cols[0];
+    ctx.fillRect(cx - 1, y0 + 6, 2, 8); // stalk
+    for (let i = 0; i < 6; i++) {
+      const c = cols[(rnd() * cols.length) | 0];
+      ctx.fillStyle = c;
+      const bx = cx + (Math.floor(rnd() * 9) - 4);
+      const by = y0 + 4 + Math.floor(rnd() * 6);
+      ctx.fillRect(Math.max(x0, Math.min(x0 + 15, bx)), by, 2, 3);
+    }
+  },
+
   // Cactus: opaque green with darker vertical ribs.
   [Tile.CACTUS]: (ctx, x0, y0, rnd) => {
     for (let y = 0; y < TILE_PX; y++) {

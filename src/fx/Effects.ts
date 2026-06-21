@@ -72,6 +72,16 @@ export class Effects {
     this.sfx.playPickup();
   }
 
+  // Phase 12d: feedback when a creature is hit / killed (particle puff + a thud).
+  onCreatureHit(pos: THREE.Vector3, color: THREE.Color): void {
+    this.particles.burst(pos.x, pos.y, pos.z, color, 6, 1);
+    this.sfx.playStep(Block.GRAVEL);
+  }
+  onCreatureDie(pos: THREE.Vector3, color: THREE.Color): void {
+    this.particles.burst(pos.x, pos.y, pos.z, color, 20, 1);
+    this.sfx.playBreak(Block.DIRT);
+  }
+
   // Phase 11.5 underwater: muffle + ambience swap (safe to call every frame — Sfx
   // dedupes), a splash (sound + droplet burst) on crossing the surface, and bubbles.
   setSubmerged(on: boolean): void {

@@ -28,6 +28,9 @@ export class Interaction {
   onEat: (food: Block) => boolean = () => false;
   private breakProgress = 0;
   private paused = false;
+  // Phase 12d: a creature under the crosshair (closer than the block) takes the hit, so
+  // mining is suppressed and the block outline hidden while one is targeted.
+  private meleeBlocked = false;
 
   constructor(
     private readonly world: World,
@@ -43,18 +46,23 @@ export class Interaction {
     if (p) this.resetBreak();
   }
 
+  setMeleeBlocked(b: boolean): void {
+    if (b && !this.meleeBlocked) this.resetBreak();
+    this.meleeBlocked = b;
+  }
+
   // Per-frame: raycast from the eye, update the selection outline.
   updateAim(origin: THREE.Vector3, dir: THREE.Vector3): void {
     const hit = this.paused ? null : raycastVoxel(this.world, origin, dir, REACH);
     if (!sameCell(hit, this.target)) this.resetBreak();
     this.target = hit;
-    this.outline.setTarget(hit ? hit.cell : null);
+    this.outline.setTarget(hit && !this.meleeBlocked ? hit.cell : null);
     if (!hit) this.breakOverlay.setStage(null, -1);
   }
 
   // Per fixed step: accrue mining progress while the left button is held.
   tick(dt: number): void {
-    if (this.paused || !this.target || !this.input.isMouseDown(0)) {
+    if (this.paused || this.meleeBlocked || !this.target || !this.input.isMouseDown(0)) {
       this.resetBreak();
       return;
     }

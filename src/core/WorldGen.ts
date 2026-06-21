@@ -169,6 +169,15 @@ function collectTreeDecisions(cx: number, cz: number, seed: number, out: Feature
       const biome = classify(f, h);
       const treeChance = BIOMES[biome].treeChance;
       if (treeChance <= 0 || hash2(gx, gz, seed + 555) > treeChance) continue;
+      // Slope gate: only grow on reasonably flat, dry ground so canopies don't hang over
+      // voids and trunks don't sit on pillars (fixes "floating blocks / weird configs").
+      const hN = surfaceHeight(wx, wz + 1, seed);
+      const hS = surfaceHeight(wx, wz - 1, seed);
+      const hE = surfaceHeight(wx + 1, wz, seed);
+      const hW = surfaceHeight(wx - 1, wz, seed);
+      const lo = Math.min(hN, hS, hE, hW);
+      const hi = Math.max(hN, hS, hE, hW);
+      if (hi - lo > 2 || lo <= SEA_LEVEL) continue; // steep slope / cliff / water edge
       const variant = Math.floor(hash2(gx, gz, seed + 558) * 5);
       out.push({ wx, wy: h, wz, kind: 'tree', tree: treeTypeForBiome(biome), variant });
     }
@@ -250,6 +259,17 @@ export function generateChunk(cx: number, cz: number, seed: number): GenResult {
         }
         if (biome === Biome.FROZEN_OCEAN || biome === Biome.FROZEN_RIVER) {
           data[idx(lx, SEA_LEVEL, lz)] = Block.ICE;
+        } else if (h >= 1 && data[idx(lx, h + 1, lz)] === Block.WATER) {
+          // Ocean flora on the seabed: seagrass/coral on shallow warm shelves, kelp deeper.
+          const depth = SEA_LEVEL - h;
+          const r = hash2(wx, wz, seed + 820);
+          const sel = hash2(wx, wz, seed + 821);
+          if (depth <= 8 && r < 0.2) {
+            data[idx(lx, h + 1, lz)] = fields.T > 0.25 && sel < 0.45 ? Block.CORAL : Block.SEAGRASS;
+          } else if (depth >= 4 && r < 0.1) {
+            const kh = 2 + Math.floor(sel * Math.min(6, SEA_LEVEL - 1 - (h + 1)));
+            for (let y = h + 1; y < h + 1 + kh && y < SEA_LEVEL; y++) data[idx(lx, y, lz)] = Block.KELP;
+          }
         }
         columnTop = SEA_LEVEL;
       } else if (h + 1 < CY && data[idx(lx, h + 1, lz)] === Block.AIR) {
