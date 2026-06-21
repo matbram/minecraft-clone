@@ -203,7 +203,7 @@ export const BIOMES: Record<Biome, BiomeDef> = {
   [Biome.SWAMP]: { top: Block.GRASS, filler: Block.DIRT, grassTint: [0.55, 0.62, 0.42], foliageTint: [0.5, 0.6, 0.4], treeChance: 0.25 },
   [Biome.JUNGLE]: { top: Block.GRASS, filler: Block.DIRT, grassTint: [0.36, 0.74, 0.28], foliageTint: [0.3, 0.66, 0.24], treeChance: 0.75 },
   [Biome.SAVANNA]: { top: Block.GRASS, filler: Block.DIRT, grassTint: [0.78, 0.74, 0.38], foliageTint: [0.72, 0.7, 0.36], treeChance: 0.08 },
-  [Biome.DESERT]: { top: Block.SAND, filler: Block.SANDSTONE, grassTint: [0.86, 0.8, 0.5], foliageTint: [0.8, 0.76, 0.48], treeChance: 0 },
-  [Biome.BADLANDS]: { top: Block.RED_SAND, filler: Block.TERRACOTTA, grassTint: [0.86, 0.7, 0.45], foliageTint: [0.8, 0.66, 0.42], treeChance: 0 },
+  [Biome.DESERT]: { top: Block.SAND, filler: Block.SANDSTONE, grassTint: [0.86, 0.8, 0.5], foliageTint: [0.8, 0.76, 0.48], treeChance: 0.06 },
+  [Biome.BADLANDS]: { top: Block.RED_SAND, filler: Block.TERRACOTTA, grassTint: [0.86, 0.7, 0.45], foliageTint: [0.8, 0.66, 0.42], treeChance: 0.05 },
   [Biome.MOUNTAIN]: { top: Block.GRASS, filler: Block.DIRT, grassTint: [0.7, 0.82, 0.62], foliageTint: [0.6, 0.74, 0.54], treeChance: 0.06 },
 };

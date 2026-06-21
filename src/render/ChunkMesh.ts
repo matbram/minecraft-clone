@@ -10,7 +10,7 @@
 
 import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
 import { Tunables } from '../core/tunables';
-import { Block, IS_TRANSPARENT, IS_FOLIAGE, tileOf, ATLAS_COLS } from '../core/BlockTypes';
+import { Block, IS_TRANSPARENT, IS_FOLIAGE, IS_CROSS, CROSS_TINTED, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import { BIOMES, type Biome } from '../core/biome';
 import { fluidSurfaceHeight } from '../core/fluid';
 import type { Chunk } from '../core/Chunk';
@@ -152,6 +152,43 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
   const transparent = newAccum();
   const maxY = self.maxY;
 
+  // Phase 12b: a cross-billboard plant — two diagonal cut-out quads (each double-sided)
+  // into the opaque (alpha-tested) pass. Flat light from the plant's own cell; waves; tinted.
+  const CROSS_PLANES: [[number, number], [number, number]][] = [
+    [[0, 0], [1, 1]],
+    [[1, 0], [0, 1]],
+  ];
+  const emitCross = (lx: number, y: number, lz: number, tile: number, sky: number, blk: number, tr: number, tg: number, tb: number): void => {
+    const col = tile % ATLAS_COLS;
+    const row = Math.floor(tile / ATLAS_COLS);
+    const u0 = col / ATLAS_COLS + INSET_U;
+    const u1 = (col + 1) / ATLAS_COLS - INSET_U;
+    const v0 = row / ATLAS_ROWS + INSET_V;
+    const v1 = (row + 1) / ATLAS_ROWS - INSET_V;
+    for (const [a, c] of CROSS_PLANES) {
+      // verts: bottomA, bottomB, topB, topA  (cu, cv with cv=1 = texture top)
+      const verts: [number, number, number, number, number][] = [
+        [a[0], 0, a[1], 0, 0],
+        [c[0], 0, c[1], 1, 0],
+        [c[0], 1, c[1], 1, 1],
+        [a[0], 1, a[1], 0, 1],
+      ];
+      const base = opaque.count;
+      for (const [vx, vy, vz, cu, cv] of verts) {
+        opaque.positions.push(lx + vx, y + vy, lz + vz);
+        opaque.normals.push(0, 1, 0);
+        opaque.light.push(sky, blk, 1);
+        opaque.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
+        opaque.wave.push(1);
+        opaque.refl.push(0);
+        opaque.tint.push(tr, tg, tb);
+      }
+      opaque.indices.push(base, base + 1, base + 2, base, base + 2, base + 3); // front
+      opaque.indices.push(base, base + 2, base + 1, base, base + 3, base + 2); // back
+      opaque.count += 4;
+    }
+  };
+
   // Scratch for one corner's sample.
   const sky4: number[] = [];
   const block4: number[] = [];
@@ -170,6 +207,15 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const bdef = BIOMES[self.getBiome(lx, lz) as Biome];
         const isLeaves = b === Block.LEAVES;
         const isGrass = b === Block.GRASS;
+
+        // Cross-billboard plants: emit two cut-out quads and skip the cube path.
+        if (IS_CROSS[b]) {
+          const sky = skyAt(wx, y, wz) / 15;
+          const blk = blockLightAt(wx, y, wz) / 15;
+          const t = CROSS_TINTED[b] ? bdef.grassTint : [1, 1, 1];
+          emitCross(lx, y, lz, tileOf(b, 2), sky, blk, t[0], t[1], t[2]);
+          continue;
+        }
 
         // Phase 11.1/11.4: sky light is absorbed passing DOWN through water, so deeper
         // submerged surfaces get darker (real underwater falloff). Baked into the sky

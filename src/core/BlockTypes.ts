@@ -29,6 +29,14 @@ export enum Block {
   PODZOL,
   CLAY,
   ICE,
+  // Phase 12b: flora. Cross-billboard plants (non-solid) + cactus (solid column).
+  TALL_GRASS,
+  FERN,
+  FLOWER_RED,
+  FLOWER_YELLOW,
+  DEAD_BUSH,
+  SUGAR_CANE,
+  CACTUS,
   // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
   // generated, or saved. It exists only so survival has an edible to refill hunger.
   APPLE,
@@ -77,9 +85,16 @@ export const Tile = {
   PODZOL: 20,
   CLAY: 21,
   ICE: 22,
+  TALL_GRASS: 23,
+  FERN: 24,
+  FLOWER_RED: 25,
+  FLOWER_YELLOW: 26,
+  DEAD_BUSH: 27,
+  SUGAR_CANE: 28,
+  CACTUS: 29,
 } as const;
 
-export const ATLAS_TILES = 23; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
+export const ATLAS_TILES = 30; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -95,6 +110,10 @@ export const IS_SOLID = new Uint8Array(BLOCK_COUNT);
 export const LIGHT_EMISSION = new Uint8Array(BLOCK_COUNT);
 // Foliage flag (Phase 4a waving-foliage vertex offset). Visual only.
 export const IS_FOLIAGE = new Uint8Array(BLOCK_COUNT);
+// Phase 12b: cross-billboard plants (rendered as two diagonal cut-out quads, not cubes).
+export const IS_CROSS = new Uint8Array(BLOCK_COUNT);
+// Cross plants whose colour follows the biome grass tint (vs keeping their own colour).
+export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
 
 (function initBlockFlags() {
   // Default: opaque, solid, no emission.
@@ -121,6 +140,19 @@ export const IS_FOLIAGE = new Uint8Array(BLOCK_COUNT);
 
   // Leaves wave (also covers the grass decoration, placed as LEAVES).
   IS_FOLIAGE[Block.LEAVES] = 1;
+
+  // Phase 12b flora. Cross plants: non-solid, transparent (don't cull neighbors), wave.
+  for (const p of [Block.TALL_GRASS, Block.FERN, Block.FLOWER_RED, Block.FLOWER_YELLOW, Block.DEAD_BUSH, Block.SUGAR_CANE]) {
+    IS_CROSS[p] = 1;
+    IS_SOLID[p] = 0;
+    IS_TRANSPARENT[p] = 1;
+    IS_FOLIAGE[p] = 1;
+  }
+  // Grass/fern/sugar cane recolour with the biome; flowers + dead bush keep their tile colour.
+  CROSS_TINTED[Block.TALL_GRASS] = 1;
+  CROSS_TINTED[Block.FERN] = 1;
+  CROSS_TINTED[Block.SUGAR_CANE] = 1;
+  // Cactus is a normal solid cube column (opaque).
 
   // Apple is a held item, never a world block: not solid (never collided/meshed).
   IS_SOLID[Block.APPLE] = 0;
@@ -180,6 +212,13 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.PODZOL, Tile.PODZOL);
   setAllFaces(Block.CLAY, Tile.CLAY);
   setAllFaces(Block.ICE, Tile.ICE);
+  setAllFaces(Block.TALL_GRASS, Tile.TALL_GRASS);
+  setAllFaces(Block.FERN, Tile.FERN);
+  setAllFaces(Block.FLOWER_RED, Tile.FLOWER_RED);
+  setAllFaces(Block.FLOWER_YELLOW, Tile.FLOWER_YELLOW);
+  setAllFaces(Block.DEAD_BUSH, Tile.DEAD_BUSH);
+  setAllFaces(Block.SUGAR_CANE, Tile.SUGAR_CANE);
+  setAllFaces(Block.CACTUS, Tile.CACTUS);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -215,6 +254,13 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.PODZOL] = 0.6;
   HARDNESS[Block.CLAY] = 0.6;
   HARDNESS[Block.ICE] = 0.5;
+  HARDNESS[Block.TALL_GRASS] = 0;
+  HARDNESS[Block.FERN] = 0;
+  HARDNESS[Block.FLOWER_RED] = 0;
+  HARDNESS[Block.FLOWER_YELLOW] = 0;
+  HARDNESS[Block.DEAD_BUSH] = 0;
+  HARDNESS[Block.SUGAR_CANE] = 0;
+  HARDNESS[Block.CACTUS] = 0.4;
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -246,6 +292,13 @@ export const PLACEABLE: Block[] = [
   Block.PODZOL,
   Block.CLAY,
   Block.ICE,
+  Block.TALL_GRASS,
+  Block.FERN,
+  Block.FLOWER_RED,
+  Block.FLOWER_YELLOW,
+  Block.DEAD_BUSH,
+  Block.SUGAR_CANE,
+  Block.CACTUS,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).

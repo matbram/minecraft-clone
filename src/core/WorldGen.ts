@@ -19,7 +19,7 @@ import {
   MOUNTAIN_STONE_Y,
   MOUNTAIN_SNOW_Y,
 } from './biome';
-import type { FeatureDecision } from './features';
+import { TreeType, type FeatureDecision } from './features';
 
 export interface GenResult {
   data: Uint8Array;
@@ -80,6 +80,68 @@ function oreAt(wx: number, y: number, wz: number, seed: number): Block {
   return Block.STONE;
 }
 
+// --- ground plants (inline, single local cells) ----------------------------
+
+function treeTypeForBiome(biome: Biome): TreeType {
+  switch (biome) {
+    case Biome.TAIGA:
+    case Biome.SNOWY_TUNDRA:
+    case Biome.MOUNTAIN:
+      return TreeType.SPRUCE;
+    case Biome.JUNGLE:
+      return TreeType.JUNGLE;
+    case Biome.SAVANNA:
+      return TreeType.ACACIA;
+    case Biome.DESERT:
+    case Biome.BADLANDS:
+      return TreeType.CACTUS;
+    default:
+      return TreeType.OAK;
+  }
+}
+
+// Choose a decorative plant for a land column (deterministic). Returns AIR for none.
+// Green plants need grassy ground (grass/podzol); dead bush grows on sand/red sand.
+function pickPlant(biome: Biome, surface: Block, wx: number, wz: number, seed: number): Block {
+  const grassy = surface === Block.GRASS || surface === Block.PODZOL;
+  const sandy = surface === Block.SAND || surface === Block.RED_SAND;
+  if (!grassy && !sandy) return Block.AIR;
+  const r = hash2(wx, wz, seed + 800); // density
+  const s = hash2(wx, wz, seed + 801); // selection
+  if (grassy) {
+    switch (biome) {
+      case Biome.PLAINS:
+        if (r < 0.22) return s < 0.86 ? Block.TALL_GRASS : s < 0.94 ? Block.FLOWER_RED : Block.FLOWER_YELLOW;
+        break;
+      case Biome.FOREST:
+      case Biome.DARK_FOREST:
+        if (r < 0.34) return s < 0.55 ? Block.TALL_GRASS : s < 0.8 ? Block.FERN : s < 0.92 ? Block.FLOWER_RED : Block.FLOWER_YELLOW;
+        break;
+      case Biome.TAIGA:
+        if (r < 0.3) return s < 0.65 ? Block.FERN : Block.TALL_GRASS;
+        break;
+      case Biome.JUNGLE:
+        if (r < 0.5) return s < 0.55 ? Block.FERN : Block.TALL_GRASS;
+        break;
+      case Biome.SWAMP:
+        if (r < 0.32) return s < 0.7 ? Block.TALL_GRASS : Block.FERN;
+        break;
+      case Biome.SAVANNA:
+        if (r < 0.24) return Block.TALL_GRASS;
+        break;
+      case Biome.MOUNTAIN:
+        if (r < 0.12) return s < 0.7 ? Block.TALL_GRASS : Block.FLOWER_YELLOW;
+        break;
+      case Biome.SNOWY_TUNDRA:
+        if (r < 0.06) return Block.TALL_GRASS;
+        break;
+    }
+  } else if (sandy && (biome === Biome.DESERT || biome === Biome.BADLANDS)) {
+    if (r < 0.05) return Block.DEAD_BUSH;
+  }
+  return Block.AIR;
+}
+
 // --- feature decisions -----------------------------------------------------
 
 const TREE_CELL = 5; // one candidate tree per 5x5 world-cell -> natural spacing
@@ -104,10 +166,11 @@ function collectTreeDecisions(cx: number, cz: number, seed: number, out: Feature
       const f = worldFields(wx, wz, seed);
       const h = terrainHeight(wx, wz, seed, f, MAX_TERRAIN_Y);
       if (h <= SEA_LEVEL + 1) continue; // no trees underwater / on beaches
-      const treeChance = BIOMES[classify(f, h)].treeChance;
+      const biome = classify(f, h);
+      const treeChance = BIOMES[biome].treeChance;
       if (treeChance <= 0 || hash2(gx, gz, seed + 555) > treeChance) continue;
-      const variant = Math.floor(hash2(gx, gz, seed + 558) * 3);
-      out.push({ wx, wy: h, wz, kind: 'tree', variant });
+      const variant = Math.floor(hash2(gx, gz, seed + 558) * 5);
+      out.push({ wx, wy: h, wz, kind: 'tree', tree: treeTypeForBiome(biome), variant });
     }
   }
 }
@@ -183,6 +246,13 @@ export function generateChunk(cx: number, cz: number, seed: number): GenResult {
           data[idx(lx, SEA_LEVEL, lz)] = Block.ICE;
         }
         columnTop = SEA_LEVEL;
+      } else if (h + 1 < CY && data[idx(lx, h + 1, lz)] === Block.AIR) {
+        // Decorative ground plant (single local cell — no cross-chunk spill).
+        const plant = pickPlant(biome, surfaceBlock, wx, wz, seed);
+        if (plant !== Block.AIR) {
+          data[idx(lx, h + 1, lz)] = plant;
+          columnTop = h + 1;
+        }
       }
 
       const top = columnTop + 1;

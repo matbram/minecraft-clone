@@ -151,7 +151,88 @@ const PAINTERS: Record<number, Painter> = {
       }
     }
   },
+
+  // --- Phase 12b flora: silhouettes on a TRANSPARENT background (alpha-test cutout) ---
+
+  // Tall grass: a clump of vertical green blades (recoloured per biome via tint).
+  [Tile.TALL_GRASS]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    for (let i = 0; i < 8; i++) {
+      const bx = x0 + 1 + i * 2;
+      const top = y0 + 3 + Math.floor(rnd() * 6);
+      const g = 135 + Math.floor(rnd() * 50);
+      ctx.fillStyle = `rgb(72,${g},52)`;
+      ctx.fillRect(bx, top, 1, y0 + TILE_PX - top);
+    }
+  },
+
+  // Fern: shorter, arched fronds.
+  [Tile.FERN]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    for (let i = 0; i < 6; i++) {
+      const bx = x0 + 2 + i * 2;
+      const top = y0 + 6 + Math.floor(rnd() * 4);
+      const g = 120 + Math.floor(rnd() * 40);
+      ctx.fillStyle = `rgb(60,${g},48)`;
+      ctx.fillRect(bx, top, 1, y0 + TILE_PX - top);
+      ctx.fillRect(bx - 1, top + 1, 3, 1); // little frond spread
+    }
+  },
+
+  // Flowers: green stem + a coloured blossom.
+  [Tile.FLOWER_RED]: (ctx, x0, y0) => flower(ctx, x0, y0, { r: 205, g: 55, b: 50 }),
+  [Tile.FLOWER_YELLOW]: (ctx, x0, y0) => flower(ctx, x0, y0, { r: 235, g: 210, b: 70 }),
+
+  // Dead bush: a few brown twigs.
+  [Tile.DEAD_BUSH]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    ctx.fillStyle = 'rgb(132,96,52)';
+    const cx = x0 + 8;
+    ctx.fillRect(cx, y0 + 7, 1, 7); // stem
+    for (let i = 0; i < 5; i++) {
+      const sx = cx + (Math.floor(rnd() * 7) - 3);
+      const sy = y0 + 7 + Math.floor(rnd() * 5);
+      ctx.fillRect(Math.min(x0 + 15, Math.max(x0, sx)), sy, 1, 3);
+    }
+  },
+
+  // Sugar cane: a tall green stalk with node bands.
+  [Tile.SUGAR_CANE]: (ctx, x0, y0) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    ctx.fillStyle = 'rgb(126,186,96)';
+    ctx.fillRect(x0 + 7, y0, 2, TILE_PX);
+    ctx.fillStyle = 'rgb(96,156,74)';
+    ctx.fillRect(x0 + 7, y0 + 4, 2, 1);
+    ctx.fillRect(x0 + 7, y0 + 10, 2, 1);
+  },
+
+  // Cactus: opaque green with darker vertical ribs.
+  [Tile.CACTUS]: (ctx, x0, y0, rnd) => {
+    for (let y = 0; y < TILE_PX; y++) {
+      for (let x = 0; x < TILE_PX; x++) {
+        const rib = x % 5 === 0 ? 0.75 : 1;
+        const f = rib * (0.9 + rnd() * 0.15);
+        const c = shade({ r: 70, g: 130, b: 60 }, f);
+        ctx.fillStyle = `rgb(${c.r},${c.g},${c.b})`;
+        ctx.fillRect(x0 + x, y0 + y, 1, 1);
+      }
+    }
+  },
 };
+
+// Shared flower painter: green stem + leaves + a coloured blossom on transparent bg.
+function flower(ctx: CanvasRenderingContext2D, x0: number, y0: number, petal: RGB): void {
+  ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+  const cx = x0 + 8;
+  ctx.fillStyle = 'rgb(60,130,50)';
+  ctx.fillRect(cx, y0 + 8, 1, 6); // stem
+  ctx.fillRect(cx - 2, y0 + 11, 2, 1); // leaves
+  ctx.fillRect(cx + 1, y0 + 10, 2, 1);
+  ctx.fillStyle = `rgb(${petal.r},${petal.g},${petal.b})`;
+  ctx.fillRect(cx - 2, y0 + 4, 5, 4); // blossom
+  ctx.fillStyle = 'rgb(245,225,90)';
+  ctx.fillRect(cx, y0 + 5, 1, 1); // center
+}
 
 // Ore tiles: stone base with colored speckle blobs.
 function paintOre(blob: RGB): Painter {
