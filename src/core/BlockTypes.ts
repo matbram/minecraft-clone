@@ -22,6 +22,13 @@ export enum Block {
   IRON_ORE,
   GOLD_ORE,
   SNOW, // Phase 12: snowy-biome surface + mountain caps
+  // Phase 12·R: geography surfaces.
+  SANDSTONE,
+  RED_SAND,
+  TERRACOTTA,
+  PODZOL,
+  CLAY,
+  ICE,
   // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
   // generated, or saved. It exists only so survival has an edible to refill hunger.
   APPLE,
@@ -64,9 +71,15 @@ export const Tile = {
   IRON_ORE: 14,
   GOLD_ORE: 15,
   SNOW: 16,
+  SANDSTONE: 17,
+  RED_SAND: 18,
+  TERRACOTTA: 19,
+  PODZOL: 20,
+  CLAY: 21,
+  ICE: 22,
 } as const;
 
-export const ATLAS_TILES = 17; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
+export const ATLAS_TILES = 23; // number of distinct tiles (atlas grid is 16 wide -> 2 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -161,6 +174,12 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.IRON_ORE, Tile.IRON_ORE);
   setAllFaces(Block.GOLD_ORE, Tile.GOLD_ORE);
   setAllFaces(Block.SNOW, Tile.SNOW);
+  setAllFaces(Block.SANDSTONE, Tile.SANDSTONE);
+  setAllFaces(Block.RED_SAND, Tile.RED_SAND);
+  setAllFaces(Block.TERRACOTTA, Tile.TERRACOTTA);
+  setAllFaces(Block.PODZOL, Tile.PODZOL);
+  setAllFaces(Block.CLAY, Tile.CLAY);
+  setAllFaces(Block.ICE, Tile.ICE);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -190,6 +209,12 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.GOLD_ORE] = 2.0;
   HARDNESS[Block.GLOWSTONE] = 2.0;
   HARDNESS[Block.SNOW] = 0.5;
+  HARDNESS[Block.SANDSTONE] = 0.8;
+  HARDNESS[Block.RED_SAND] = 0.5;
+  HARDNESS[Block.TERRACOTTA] = 1.0;
+  HARDNESS[Block.PODZOL] = 0.6;
+  HARDNESS[Block.CLAY] = 0.6;
+  HARDNESS[Block.ICE] = 0.5;
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -215,6 +240,12 @@ export const PLACEABLE: Block[] = [
   Block.IRON_ORE,
   Block.GOLD_ORE,
   Block.SNOW,
+  Block.SANDSTONE,
+  Block.RED_SAND,
+  Block.TERRACOTTA,
+  Block.PODZOL,
+  Block.CLAY,
+  Block.ICE,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).

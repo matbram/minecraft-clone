@@ -64,6 +64,12 @@ const PAINTERS: Record<number, Painter> = {
   [Tile.BEDROCK]: speckle({ r: 70, g: 70, b: 74 }, 0.5),
   [Tile.LEAVES]: speckle({ r: 58, g: 120, b: 48 }, 0.4),
   [Tile.SNOW]: speckle({ r: 236, g: 242, b: 250 }, 0.08),
+  [Tile.SANDSTONE]: speckle({ r: 214, g: 198, b: 152 }, 0.12),
+  [Tile.RED_SAND]: speckle({ r: 190, g: 110, b: 58 }, 0.16),
+  [Tile.TERRACOTTA]: speckle({ r: 150, g: 90, b: 60 }, 0.2),
+  [Tile.PODZOL]: speckle({ r: 92, g: 64, b: 38 }, 0.3),
+  [Tile.CLAY]: speckle({ r: 162, g: 168, b: 178 }, 0.12),
+  [Tile.ICE]: speckle({ r: 170, g: 205, b: 235 }, 0.06),
 
   // Grass side: dirt body with a green cap fading down.
   [Tile.GRASS_SIDE]: (ctx, x0, y0, rnd) => {

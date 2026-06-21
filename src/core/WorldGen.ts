@@ -1,16 +1,24 @@
 // Procedural world generation. PURE and worker-safe (no DOM / THREE).
 //
-// generateChunk() produces terrain + caves + ore and a list of deterministic
-// feature DECISIONS (trees / grass). Feature PLACEMENT happens on the main
-// thread (see World.placeFeatures) because cross-chunk spillover needs the
-// shared World.pending map.
+// generateChunk() produces terrain + caves + ore + a per-column biome map, plus a list
+// of deterministic feature DECISIONS (trees). Terrain shape + biomes come from the
+// multi-noise / Whittaker model in core/biome.ts. Feature PLACEMENT happens on the main
+// thread (see World.placeFeatures) because cross-chunk spillover needs World.pending.
 
 import { BLOCKS, COLS, CX, CZ, CY, SEA_LEVEL, BEDROCK_Y, idx, colIdx } from './constants';
 import { Block } from './BlockTypes';
-import { fbm2, fbm3, ridged2, ridged3 } from './noise/fbm';
+import { fbm3, ridged3 } from './noise/fbm';
 import { hash2, hash3 } from './noise/hash';
-import { biomeFields, mountainAmount, classify, BIOMES, Biome, MOUNTAIN_STONE_Y, MOUNTAIN_SNOW_Y } from './biome';
-import type { BiomeFields } from './biome';
+import {
+  worldFields,
+  terrainHeight,
+  classify,
+  BIOMES,
+  Biome,
+  MOUNTAIN_Y,
+  MOUNTAIN_STONE_Y,
+  MOUNTAIN_SNOW_Y,
+} from './biome';
 import type { FeatureDecision } from './features';
 
 export interface GenResult {
@@ -21,29 +29,30 @@ export interface GenResult {
   features: FeatureDecision[];
 }
 
-// --- terrain shaping -------------------------------------------------------
-
 const MAX_TERRAIN_Y = CY - 40; // leave headroom for trees/structures
 
-export function surfaceHeight(wx: number, wz: number, seed: number, fields?: BiomeFields): number {
-  // Broad continents + rolling hills + fine detail. Biased above sea level so
-  // most of the world is walkable land with water pooling in the valleys.
-  const continental = fbm2(wx, wz, seed, { frequency: 1 / 384, octaves: 3, lacunarity: 2, gain: 0.5 });
-  const hills = fbm2(wx, wz, seed + 7, { frequency: 1 / 96, octaves: 4, lacunarity: 2, gain: 0.5 });
-  const detail = fbm2(wx, wz, seed + 13, { frequency: 1 / 32, octaves: 2, lacunarity: 2, gain: 0.5 });
-  let h = SEA_LEVEL + 8 + continental * 30 + hills * 18 + detail * 5;
-  // Mountains: ridged peaks added smoothly where "mountainousness" is high. Driven by
-  // a continuous field so biome borders ramp up instead of forming cliffs.
-  const f = fields ?? biomeFields(wx, wz, seed);
-  const mAmt = mountainAmount(f.mount);
-  if (mAmt > 0.001) {
-    const ridge = ridged2(wx, wz, seed + 4000, { frequency: 1 / 220, octaves: 4, lacunarity: 2, gain: 0.5 });
-    h += ridge * 72 * mAmt;
+// Convenience height (computes fields internally). Used by tree placement + spawn search.
+export function surfaceHeight(wx: number, wz: number, seed: number): number {
+  const f = worldFields(wx, wz, seed);
+  return terrainHeight(wx, wz, seed, f, MAX_TERRAIN_Y);
+}
+
+// Find dry, walkable land near the origin so the player never spawns in the ocean or on a
+// peak (with ~30-40% ocean this matters). Spirals outward for a column above the beach line
+// and below the mountains; falls back to the origin column.
+export function findLandSpawn(seed: number, cx = 8, cz = 8): { x: number; y: number; z: number } {
+  for (let r = 0; r <= 256; r += 4) {
+    const steps = Math.max(1, r * 2);
+    for (let a = 0; a < steps; a++) {
+      const ang = (a / steps) * Math.PI * 2;
+      const x = Math.floor(cx + Math.cos(ang) * r);
+      const z = Math.floor(cz + Math.sin(ang) * r);
+      const h = surfaceHeight(x, z, seed);
+      if (h >= SEA_LEVEL + 2 && h < MOUNTAIN_Y) return { x: x + 0.5, y: h + 2, z: z + 0.5 };
+    }
   }
-  h = Math.round(h);
-  if (h < 1) h = 1;
-  if (h > MAX_TERRAIN_Y) h = MAX_TERRAIN_Y;
-  return h;
+  const h = surfaceHeight(cx, cz, seed);
+  return { x: cx + 0.5, y: Math.max(h, SEA_LEVEL) + 2, z: cz + 0.5 };
 }
 
 // --- caves -----------------------------------------------------------------
@@ -64,7 +73,6 @@ function isCave(wx: number, y: number, wz: number, seed: number): boolean {
 // --- ore -------------------------------------------------------------------
 
 function oreAt(wx: number, y: number, wz: number, seed: number): Block {
-  // Scattered ore with depth gating (single-cell for P0; blob veins are a polish item).
   const r = hash3(wx, y, wz, seed + 909);
   if (y < 16 && r < 0.006) return Block.GOLD_ORE;
   if (y < 40 && r < 0.012) return Block.IRON_ORE;
@@ -77,7 +85,6 @@ function oreAt(wx: number, y: number, wz: number, seed: number): Block {
 const TREE_CELL = 5; // one candidate tree per 5x5 world-cell -> natural spacing
 
 function collectTreeDecisions(cx: number, cz: number, seed: number, out: FeatureDecision[]): void {
-  // Iterate the grid cells that can have an anchor inside this chunk.
   const minWx = cx * CX;
   const minWz = cz * CZ;
   const g0x = Math.floor(minWx / TREE_CELL) - 1;
@@ -87,8 +94,6 @@ function collectTreeDecisions(cx: number, cz: number, seed: number, out: Feature
 
   for (let gz = g0z; gz <= g1z; gz++) {
     for (let gx = g0x; gx <= g1x; gx++) {
-      if (hash2(gx, gz, seed + 555) > 0.32) continue; // ~32% of cells host a tree
-      // Anchor position within the cell, hashed.
       const ox = Math.floor(hash2(gx, gz, seed + 556) * TREE_CELL);
       const oz = Math.floor(hash2(gx, gz, seed + 557) * TREE_CELL);
       const wx = gx * TREE_CELL + ox;
@@ -96,10 +101,9 @@ function collectTreeDecisions(cx: number, cz: number, seed: number, out: Feature
       // Only emit decisions whose ANCHOR is inside this chunk (avoids double placement).
       if (wx < minWx || wx >= minWx + CX || wz < minWz || wz >= minWz + CZ) continue;
 
-      const f = biomeFields(wx, wz, seed);
-      const h = surfaceHeight(wx, wz, seed, f);
+      const f = worldFields(wx, wz, seed);
+      const h = terrainHeight(wx, wz, seed, f, MAX_TERRAIN_Y);
       if (h <= SEA_LEVEL + 1) continue; // no trees underwater / on beaches
-      // Density per biome: forests dense, plains sparse, desert none, etc.
       const treeChance = BIOMES[classify(f, h)].treeChance;
       if (treeChance <= 0 || hash2(gx, gz, seed + 555) > treeChance) continue;
       const variant = Math.floor(hash2(gx, gz, seed + 558) * 3);
@@ -120,36 +124,31 @@ export function generateChunk(cx: number, cz: number, seed: number): GenResult {
     for (let lx = 0; lx < CX; lx++) {
       const wx = cx * CX + lx;
       const wz = cz * CZ + lz;
-      const fields = biomeFields(wx, wz, seed);
-      const h = surfaceHeight(wx, wz, seed, fields);
-      const underwater = h < SEA_LEVEL;
-      const beach = !underwater && h <= SEA_LEVEL + 1;
+      const fields = worldFields(wx, wz, seed);
+      const h = terrainHeight(wx, wz, seed, fields, MAX_TERRAIN_Y);
       const biome = classify(fields, h);
       biomeMap[colIdx(lx, lz)] = biome;
+      const underwater = h < SEA_LEVEL;
 
-      // Surface + sub-surface blocks: sand at/under the shoreline, otherwise the
-      // biome's blocks; mountains turn to rock then snow with elevation.
-      let surfaceBlock: Block;
-      let fillerBlock: Block;
+      // Surface + sub-surface blocks from the biome, with terrain-aware specials.
+      const def = BIOMES[biome];
+      let surfaceBlock = def.top;
+      let fillerBlock = def.filler;
       if (underwater) {
-        surfaceBlock = Block.SAND;
-        fillerBlock = Block.SAND;
-      } else if (beach) {
-        surfaceBlock = Block.SAND;
-        fillerBlock = Block.DIRT;
-      } else {
-        const def = BIOMES[biome];
-        surfaceBlock = def.top;
-        fillerBlock = def.filler;
-        if (biome === Biome.MOUNTAIN) {
-          if (h >= MOUNTAIN_SNOW_Y) {
-            surfaceBlock = Block.SNOW;
-            fillerBlock = Block.STONE;
-          } else if (h >= MOUNTAIN_STONE_Y) {
-            surfaceBlock = Block.STONE;
-            fillerBlock = Block.STONE;
-          }
+        // Ocean/river floor: sandy on the shallow shelf, gravel in the depths.
+        const deep = biome === Biome.DEEP_OCEAN || SEA_LEVEL - h > 4;
+        surfaceBlock = deep ? Block.GRAVEL : Block.SAND;
+        fillerBlock = deep ? Block.GRAVEL : Block.SAND;
+      } else if (biome === Biome.MOUNTAIN) {
+        if (h >= MOUNTAIN_SNOW_Y) {
+          surfaceBlock = Block.SNOW;
+          fillerBlock = Block.STONE;
+        } else if (h >= MOUNTAIN_STONE_Y) {
+          surfaceBlock = Block.STONE;
+          fillerBlock = Block.STONE;
         }
+      } else if (biome === Biome.TAIGA && hash2(wx, wz, seed + 777) < 0.4) {
+        surfaceBlock = Block.PODZOL; // podzol patches
       }
 
       let columnTop = 0;
@@ -175,10 +174,13 @@ export function generateChunk(cx: number, cz: number, seed: number): GenResult {
         if (y > columnTop) columnTop = y;
       }
 
-      // Fill water from the terrain top up to sea level.
-      if (h < SEA_LEVEL) {
+      // Fill water from the terrain top up to sea level; cap frozen biomes with ice.
+      if (underwater) {
         for (let y = h + 1; y <= SEA_LEVEL; y++) {
           data[idx(lx, y, lz)] = Block.WATER;
+        }
+        if (biome === Biome.FROZEN_OCEAN || biome === Biome.FROZEN_RIVER) {
+          data[idx(lx, SEA_LEVEL, lz)] = Block.ICE;
         }
         columnTop = SEA_LEVEL;
       }

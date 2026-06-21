@@ -23,7 +23,7 @@ import {
 } from './core/constants';
 import { Tunables } from './core/tunables';
 import { Block } from './core/BlockTypes';
-import { surfaceHeight } from './core/WorldGen';
+import { findLandSpawn } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
 import { buildAtlas } from './render/atlas';
@@ -179,10 +179,8 @@ const chunkManager = new ChunkManager(world, scheduler, chunkRenderer);
 // --- player + interaction --------------------------------------------------
 const input = new Input(renderer.domElement);
 
-const spawnX = 8.5;
-const spawnZ = 8.5;
-const spawnY = surfaceHeight(Math.floor(spawnX), Math.floor(spawnZ), seed) + 2;
-const spawnPos = new THREE.Vector3(spawnX, spawnY, spawnZ);
+const spawn = findLandSpawn(seed); // dry land near origin (avoids ocean/peak spawns)
+const spawnPos = new THREE.Vector3(spawn.x, spawn.y, spawn.z);
 const player = new Player(world, input, spawnPos);
 input.pitch = -0.2;
 

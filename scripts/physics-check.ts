@@ -3,16 +3,22 @@
 import * as THREE from 'three';
 import { World } from '../src/world/World';
 import { Chunk } from '../src/core/Chunk';
-import { generateChunk, surfaceHeight } from '../src/core/WorldGen';
+import { generateChunk, surfaceHeight, findLandSpawn } from '../src/core/WorldGen';
 import { Player } from '../src/player/Player';
 import type { Input } from '../src/player/Input';
 import { raycastVoxel } from '../src/interaction/Raycast';
 import { JUMP_VELOCITY } from '../src/core/constants';
 
 const SEED = 1337;
+// Pick a dry-land column (worldgen has ~30-40% ocean) and generate chunks around it.
+const spawn = findLandSpawn(SEED);
+const bx = Math.floor(spawn.x);
+const bz = Math.floor(spawn.z);
+const ccx = Math.floor(bx / 16);
+const ccz = Math.floor(bz / 16);
 const world = new World(SEED);
-for (let cz = -1; cz <= 1; cz++)
-  for (let cx = -1; cx <= 1; cx++) {
+for (let cz = ccz - 1; cz <= ccz + 1; cz++)
+  for (let cx = ccx - 1; cx <= ccx + 1; cx++) {
     const r = generateChunk(cx, cz, SEED);
     world.addChunk(new Chunk(cx, cz, r.data, r.heightMap, r.maxY));
   }
@@ -21,11 +27,11 @@ function stub(keys: Record<string, boolean> = {}): Input {
   return { locked: true, yaw: 0, pitch: 0, isDown: (c: string) => !!keys[c] } as unknown as Input;
 }
 
-const h = surfaceHeight(8, 8, SEED);
+const h = surfaceHeight(bx, bz, SEED);
 let pass = true;
 
 // 1. Falls and lands flush on the surface, onGround true.
-const p = new Player(world, stub(), new THREE.Vector3(8.5, h + 6, 8.5));
+const p = new Player(world, stub(), new THREE.Vector3(bx + 0.5, h + 6, bz + 0.5));
 for (let i = 0; i < 200; i++) {
   p.prevPos.copy(p.pos);
   p.tick(1 / 20);
@@ -35,7 +41,7 @@ console.log(`land: y=${p.pos.y.toFixed(3)} expected~${h + 1} onGround=${p.onGrou
 pass &&= restOk;
 
 // 2. No tunneling from a high fast fall (start 60 blocks up).
-const p2 = new Player(world, stub(), new THREE.Vector3(8.5, h + 60, 8.5));
+const p2 = new Player(world, stub(), new THREE.Vector3(bx + 0.5, h + 60, bz + 0.5));
 for (let i = 0; i < 400; i++) {
   p2.prevPos.copy(p2.pos);
   p2.tick(1 / 20);
@@ -45,7 +51,7 @@ console.log(`fast fall: y=${p2.pos.y.toFixed(3)} onGround=${p2.onGround} -> ${fa
 pass &&= fallOk;
 
 // 3. Jump: held Space from grounded -> leaves the ground, peak ~JUMP^2/(2g) above rest.
-const pj = new Player(world, stub({ Space: true }), new THREE.Vector3(8.5, h + 1.5, 8.5));
+const pj = new Player(world, stub({ Space: true }), new THREE.Vector3(bx + 0.5, h + 1.5, bz + 0.5));
 let maxY = -Infinity;
 for (let i = 0; i < 80; i++) {
   pj.prevPos.copy(pj.pos);
@@ -58,18 +64,19 @@ console.log(`jump: peak rise=${jumpRise.toFixed(2)} (expect ~${(JUMP_VELOCITY * 
 pass &&= jumpOk;
 
 // 4. Walls: walking +X into a placed solid column stops flush (no penetration).
-world.editBlock(11, h + 1, 8, 1 /* STONE */);
-const pw = new Player(world, stub({ KeyD: true }), new THREE.Vector3(8.5, h + 1, 8.5)); // KeyD = +X with yaw 0
+const wallX = bx + 3;
+world.editBlock(wallX, h + 1, bz, 1 /* STONE */);
+const pw = new Player(world, stub({ KeyD: true }), new THREE.Vector3(bx + 0.5, h + 1, bz + 0.5)); // KeyD = +X with yaw 0
 for (let i = 0; i < 100; i++) {
   pw.prevPos.copy(pw.pos);
   pw.tick(1 / 20);
 }
-const wallOk = pw.pos.x <= 11 - 0.3 + 1e-2; // maxX must not enter the block at x=11
-console.log(`wall stop: x=${pw.pos.x.toFixed(3)} (block at x=11) -> ${wallOk ? 'OK' : 'FAIL'}`);
+const wallOk = pw.pos.x <= wallX - 0.3 + 1e-2; // maxX must not enter the block at wallX
+console.log(`wall stop: x=${pw.pos.x.toFixed(3)} (block at x=${wallX}) -> ${wallOk ? 'OK' : 'FAIL'}`);
 pass &&= wallOk;
 
 // 5. Raycast straight down hits the surface cell with an upward face normal.
-const hit = raycastVoxel(world, new THREE.Vector3(8.5, h + 5, 8.5), new THREE.Vector3(0, -1, 0), 20);
+const hit = raycastVoxel(world, new THREE.Vector3(bx + 0.5, h + 5, bz + 0.5), new THREE.Vector3(0, -1, 0), 20);
 const rayOk = !!hit && hit.cell.y === h && hit.normal.y === 1 && hit.place.y === h + 1;
 console.log(`raycast down: ${hit ? `cell.y=${hit.cell.y} normal.y=${hit.normal.y}` : 'null'} -> ${rayOk ? 'OK' : 'FAIL'}`);
 pass &&= rayOk;
