@@ -49,6 +49,7 @@ import { Sky } from './render/Sky';
 import { SunMoon } from './render/SunMoon';
 import { Clouds } from './render/Clouds';
 import { Stars } from './render/Stars';
+import { SpaceLayer } from './render/SpaceLayer';
 import { Composer } from './render/post/Composer';
 import { ShadowMapper } from './render/shadows/ShadowMapper';
 import { PlanarReflection } from './render/water/PlanarReflection';
@@ -238,6 +239,7 @@ const sky = new Sky(scene);
 const sunMoon = new SunMoon(scene);
 const clouds = new Clouds(scene);
 const stars = new Stars(scene);
+const spaceLayer = new SpaceLayer(scene, seed); // Phase 12.5b: planet backdrop in space
 const composer = new Composer(renderer, scene, camera, settings);
 const shadowMapper = new ShadowMapper(materials.shared);
 const planarReflection = new PlanarReflection(materials.shared);
@@ -272,6 +274,7 @@ function applyPreset(p: Preset): void {
   sunMoon.setVisible(settings.sun);
   clouds.setVisible(settings.clouds);
   stars.setVisible(settings.stars);
+  spaceLayer.setEnabled(settings.planet);
   // Phase 4b: toggling only binds/unbinds maps + strengths -> no rebuild.
   shadowMapper.setActive(settings.shadows);
   planarReflection.setActive(settings.waterReflections);
@@ -620,6 +623,7 @@ function frame(now: number): void {
   stars.setSpace(altT);
   clouds.setSpace(altT);
   sunMoon.setSpace(altT);
+  spaceLayer.update(camera.position, altT, dayNight);
 
   materials.shared.uTime.value = now / 1000;
   materials.shared.uDayFactor.value = dayNight.dayFactor;

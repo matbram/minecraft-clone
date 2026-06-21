@@ -24,6 +24,7 @@ export interface QualitySettings {
   sun: boolean;
   clouds: boolean;
   stars: boolean;
+  planet: boolean; // Phase 12.5b: curved planet backdrop + atmospheric limb in space
   shadows: boolean; // Cinematic only: real-time sun shadows
   waterReflections: boolean; // Cinematic only: planar water reflection
   renderDistance: number;
@@ -41,6 +42,7 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: false,
     stars: false,
+    planet: false,
     shadows: false,
     waterReflections: false,
     renderDistance: RENDER_DISTANCE_LOW,
@@ -56,6 +58,7 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: true,
     stars: true,
+    planet: true,
     shadows: false,
     waterReflections: false,
     renderDistance: RENDER_DISTANCE_MED,
@@ -71,6 +74,7 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     sun: true,
     clouds: true,
     stars: true,
+    planet: true,
     shadows: true,
     waterReflections: true,
     renderDistance: RENDER_DISTANCE_CINEMATIC,
