@@ -118,10 +118,12 @@ export class ChunkRenderer {
     mesh.position.set(cx * CX, 0, cz * CZ); // local geometry coords + chunk offset
     mesh.frustumCulled = true;
     if (pass === 'transparent') {
-      mesh.renderOrder = 1;
-      // Transparent (water/glass) lives ONLY on the transparent layer so the
-      // planar-reflection camera (default mask) never reflects the water itself.
-      // The main camera enables this layer (see main.ts) to keep seeing it.
+      // Phase 17 triplet: opaque(0) -> water(1) -> glass/leaves(2), so the water sheet
+      // draws after the opaque bottom but before glass. depthWrite off (material).
+      mesh.renderOrder = 2;
+      // Transparent (glass) lives ONLY on the transparent layer so the planar-reflection
+      // camera (default mask) never reflects it / the water. The main camera enables this
+      // layer (see main.ts) to keep seeing it.
       mesh.layers.set(LAYER_TRANSPARENT);
     } else {
       // Opaque chunks also cast sun shadows -> add the shadow-caster layer.
