@@ -22,6 +22,8 @@ import {
   FLY_SPEED,
   FLY_SPRINT_MULT,
   WATER_GRAVITY,
+  WATER_BUOYANCY,
+  WATER_FLOW_PUSH,
   WATER_VERTICAL_DRAG,
   WATER_MAX_SINK,
   WATER_MAX_RISE,
@@ -64,6 +66,7 @@ export class Player {
 
   private readonly world: World;
   private readonly input: Input;
+  private readonly flow = { x: 0, z: 0 }; // Phase 16: scratch for the water current sample
 
   constructor(world: World, input: Input, spawn: THREE.Vector3) {
     this.world = world;
@@ -155,14 +158,28 @@ export class Player {
       this.vel.z *= drag;
     }
 
-    // Vertical: buoyant swimming in water, normal gravity otherwise.
+    // Vertical: FLOAT by default (Phase 16). With no input the player rises to the surface
+    // and bobs at the waterline; Space climbs/swims up, Shift dives. Normal gravity otherwise.
     if (inWater) {
-      if (jump) this.vel.y += SWIM_UP_ACCEL * dt; // rise / climb out
-      if (sneak) this.vel.y -= SWIM_DOWN_ACCEL * dt; // dive
-      this.vel.y -= WATER_GRAVITY * dt; // gentle sink
+      const headSubmerged =
+        this.world.getBlockWorld(Math.floor(this.pos.x), Math.floor(this.pos.y + HEIGHT * 0.9), Math.floor(this.pos.z)) ===
+        Block.WATER;
+      if (jump) {
+        this.vel.y += SWIM_UP_ACCEL * dt; // swim up / climb out
+      } else if (sneak) {
+        this.vel.y -= SWIM_DOWN_ACCEL * dt; // dive (overcomes buoyancy)
+      } else if (headSubmerged) {
+        this.vel.y += WATER_BUOYANCY * dt; // submerged -> buoyancy lifts you toward the surface
+      } else {
+        this.vel.y -= WATER_GRAVITY * dt; // head out -> settle gently so you bob at the surface
+      }
       this.vel.y *= WATER_VERTICAL_DRAG; // damping -> smooth bob + softens fall-in
       if (this.vel.y < -WATER_MAX_SINK) this.vel.y = -WATER_MAX_SINK;
       if (this.vel.y > WATER_MAX_RISE) this.vel.y = WATER_MAX_RISE;
+      // Current push: flowing water carries the player downstream (0 in still water / oceans).
+      this.world.flowDir(Math.floor(this.pos.x), Math.floor(this.pos.y + 0.5), Math.floor(this.pos.z), this.flow);
+      this.vel.x += this.flow.x * WATER_FLOW_PUSH * dt;
+      this.vel.z += this.flow.z * WATER_FLOW_PUSH * dt;
     } else {
       this.vel.y -= GRAVITY * dt;
       if (this.vel.y < -TERMINAL_VY) this.vel.y = -TERMINAL_VY;

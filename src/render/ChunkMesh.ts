@@ -147,6 +147,23 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
   // water cell directly above (full-height column).
   const waterHeightAt = (wx: number, wy: number, wz: number): number =>
     fluidSurfaceHeight(Block.WATER, fluidAt(wx, wy, wz), blockAt(wx, wy + 1, wz) === Block.WATER);
+  // Phase 16: smoothed surface — a top corner's height is the average of the water columns
+  // meeting at it (self + 2 edges + the diagonal), so adjacent flowing levels read as a
+  // continuous slope instead of stepped cubes. cx/cz in {0,1} pick the corner of cell (wx,wz).
+  const cornerHeightAt = (wx: number, wy: number, wz: number, cx: number, cz: number): number => {
+    const sx = cx === 1 ? 1 : -1;
+    const sz = cz === 1 ? 1 : -1;
+    let sum = 0;
+    let n = 0;
+    const offs = [[0, 0], [sx, 0], [0, sz], [sx, sz]];
+    for (const [ox, oz] of offs) {
+      if (blockAt(wx + ox, wy, wz + oz) === Block.WATER) {
+        sum += waterHeightAt(wx + ox, wy, wz + oz);
+        n++;
+      }
+    }
+    return n > 0 ? sum / n : 1.0;
+  };
 
   const opaque = newAccum();
   const transparent = newAccum();
@@ -231,6 +248,16 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const h = isWater
           ? fluidSurfaceHeight(b, selfFluid, blockAt(wx, y + 1, wz) === Block.WATER)
           : 1;
+        // Phase 16: smoothed top-corner heights (index = vx*2+vz). Only computed for SURFACE
+        // water (air above) — buried interior cells render full height, so they skip this.
+        const exposedTop = isWater && blockAt(wx, y + 1, wz) !== Block.WATER;
+        let cH0 = 1, cH1 = 1, cH2 = 1, cH3 = 1;
+        if (exposedTop) {
+          cH0 = cornerHeightAt(wx, y, wz, 0, 0);
+          cH1 = cornerHeightAt(wx, y, wz, 0, 1);
+          cH2 = cornerHeightAt(wx, y, wz, 1, 0);
+          cH3 = cornerHeightAt(wx, y, wz, 1, 1);
+        }
 
         for (let f = 0; f < 6; f++) {
           const face = FACES[f];
@@ -257,10 +284,14 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           if (!isWater) {
             draw = shouldRenderFace(b, nbr);
           } else if (f === 2 || f === 3) {
-            topH = h; // top face drops to h; bottom face's corners are all at 0
-            draw = shouldRenderFace(b, nbr);
+            // Phase 16: water top/bottom draw ONLY against AIR (the real surface / underside).
+            // Drawing against transparent neighbours (kelp/seagrass/coral/leaves/glass) is what
+            // wrapped every submerged object in a blue "shell" — removed.
+            topH = h;
+            draw = nbr === Block.AIR;
           } else {
-            // Side face: span from a floor up to h.
+            // Side face: against AIR (full side to h) or a SHORTER water neighbour (the exposed
+            // lip). Never against plants/glass/leaves/solids (no shell).
             topH = h;
             if (nbr === Block.AIR) {
               draw = true;
@@ -269,7 +300,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
               draw = nh < h - 1e-4; // only the exposed lip; equal/taller neighbor culls
               botH = nh;
             } else {
-              draw = shouldRenderFace(b, nbr); // glass -> draw full side; opaque -> cull
+              draw = false; // plants/glass/leaves/solids: water draws no face here
             }
           }
           if (!draw) continue;
@@ -353,9 +384,16 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const ao = AO_CURVE[level];
 
             const vert = face.corners[i];
-            // Water shortens faces: top corners (vert[1]===1) sit at topH, bottom
-            // corners at botH. Non-water uses topH=1/botH=0 -> unchanged.
-            const vy = vert[1] === 1 ? topH : botH;
+            // Water shortens faces: top corners (vert[1]===1) sit at the smoothed corner
+            // height (Phase 16) so the surface slopes; bottom corners at botH. Non-water uses
+            // topH=1/botH=0 -> unchanged.
+            let vy: number;
+            if (vert[1] === 1) {
+              if (exposedTop) vy = vert[0] === 1 ? (vert[2] === 1 ? cH3 : cH2) : vert[2] === 1 ? cH1 : cH0;
+              else vy = topH; // non-water, or buried water (topH = h = 1.0)
+            } else {
+              vy = botH;
+            }
             acc.positions.push(lx + vert[0], y + vy, lz + vert[2]);
             acc.normals.push(face.n[0], face.n[1], face.n[2]);
             acc.light.push(sky * skyAtten, blk, ao);

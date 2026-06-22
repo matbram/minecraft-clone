@@ -137,6 +137,12 @@ export class World {
     this.fluidSim.tick(maxOps);
   }
 
+  // Phase 16: horizontal flow direction at a cell (downhill water-surface gradient; ~0 in a
+  // still pool/ocean). The player reads this to be pushed by a current. Writes into `out`.
+  flowDir(wx: number, wy: number, wz: number, out: { x: number; z: number }): void {
+    this.fluidSim.flowAt(wx, wy, wz, out);
+  }
+
   // Phase 15.2: advance the fire sim (spread/consume/smolder + particle emission).
   tickFires(maxOps: number): void {
     this.fireSim.tick(maxOps);

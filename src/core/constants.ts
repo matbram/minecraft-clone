@@ -203,15 +203,17 @@ export const WATER_SURFACE_Y = SEA_LEVEL + 1; // every water top-face sits here
 export const REFLECT_DOWNSCALE = 0.5; // planar reflection render-target scale
 
 // ---------------------------------------------------------------------------
-// Phase 5: swimming / water physics. Applied per fixed step (20 TPS), same as
+// Phase 5/16: swimming / water physics. Applied per fixed step (20 TPS), same as
 // the land physics above. Tune by feel.
 // ---------------------------------------------------------------------------
-export const WATER_GRAVITY = 9; // gentle sink (vs GRAVITY 28) -> buoyant feel
+export const WATER_GRAVITY = 2; // weak settling term (Phase 16: buoyancy floats you up by default)
+export const WATER_BUOYANCY = 16; // Phase 16: upward accel that rises you to the surface (no input)
+export const WATER_FLOW_PUSH = 6; // Phase 16: horizontal current force from flowing water (blocks/s^2)
 export const WATER_VERTICAL_DRAG = 0.8; // per-tick vy damping -> smooth bob
 export const WATER_MAX_SINK = 6; // clamp downward swim speed (blocks/s)
 export const WATER_MAX_RISE = 6; // clamp upward swim speed (blocks/s)
 export const SWIM_UP_ACCEL = 30; // hold Space to rise toward the surface
-export const SWIM_DOWN_ACCEL = 24; // hold Shift to dive
+export const SWIM_DOWN_ACCEL = 26; // hold Shift to dive (overcomes buoyancy)
 export const SWIM_SPEED = 3.0; // horizontal swim speed (vs WALK_SPEED 4.3)
 export const SWIM_SPRINT_MULT = 1.35; // sprint-swim multiplier
 export const SWIM_ACCEL = 22; // horizontal accel in water
@@ -333,14 +335,16 @@ export const MAX_TORCH_LIGHTS = 16; // shader array cap (KEEP IN SYNC with block
 export const TORCH_LIGHT_GATHER_DIST = 40; // gather placed torch/flare lights within this radius
 
 // ---------------------------------------------------------------------------
-// Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel
-// `fluid` byte per cell (only meaningful where the block id is WATER):
-//   low 3 bits = level (0 = source/full, 1..7 = thinning), bit 0x08 = falling.
+// Phase 6/16: flowing water (Minecraft-style). The flow level lives in a parallel
+// `fluid` byte per cell (only meaningful where the block id is WATER). Phase 16:
+// 4-bit level (0 = source/full, 1..MAX = thinning), bit 0x10 = falling. `fluid` is
+// NEVER persisted (rehydrated on load), so the wider encoding needs no migration.
 // ---------------------------------------------------------------------------
-export const FLUID_TICK_DELAY = 5; // ticks before an enqueued cell updates (MC water)
-export const MAX_FLUID_OPS_PER_TICK = 256; // cells processed per 20 TPS tick (throttle)
-export const FLUID_MAX_LEVEL = 7; // 1..7 flowing; 0 = source
-export const FLUID_FALLING = 0x08; // falling-bit in the fluid byte
-export const FLUID_LEVEL_MASK = 0x07;
-// Level -> visual top height (fraction of a block). Sources/falling render full.
-export const FLUID_HEIGHTS = [1.0, 0.875, 0.75, 0.625, 0.5, 0.375, 0.25, 0.125];
+export const FLUID_TICK_DELAY = 1; // ticks before an enqueued cell updates (fast, smooth spread)
+export const MAX_FLUID_OPS_PER_TICK = 1024; // cells processed per 20 TPS tick (remesh is throttled separately)
+export const FLUID_BUCKETS = 8; // due-tick ring size (> FLUID_TICK_DELAY); bucketed scheduler
+export const FLUID_MAX_LEVEL = 10; // 1..MAX flowing; 0 = source (longer reach + finer slopes)
+export const FLUID_FALLING = 0x10; // falling-bit in the fluid byte (4-bit level below)
+export const FLUID_LEVEL_MASK = 0x0f;
+// Phase 16: visual top height is computed (continuous) in fluid.ts from the level; the
+// renderer corner-averages neighbours for a smooth sloped surface.

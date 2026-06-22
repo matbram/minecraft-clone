@@ -13,14 +13,20 @@
 //                              has no feeder (and isn't fed from above).
 // Water prefers to fall: it only spreads horizontally when it can't go down.
 
-import { CY, worldToChunk, FLUID_MAX_LEVEL, FLUID_TICK_DELAY } from '../core/constants';
+import { CY, worldToChunk, FLUID_MAX_LEVEL, FLUID_TICK_DELAY, FLUID_BUCKETS } from '../core/constants';
 import { Block, IS_SOLID } from '../core/BlockTypes';
-import { levelOf, isFalling, makeFluid } from '../core/fluid';
+import { levelOf, isFalling, makeFluid, fluidSurfaceHeight } from '../core/fluid';
 import type { World } from './World';
 
 export class FluidSim {
   private readonly world: World;
-  private readonly pending = new Map<string, number>(); // cellKey -> dueTick
+  // Phase 16: bucketed due-tick scheduler — a ring of FLUID_BUCKETS cell lists indexed by
+  // (dueTick % FLUID_BUCKETS). enqueue is O(1) and each tick drains the current bucket (a
+  // whole flow wave) up to maxOps, deferring overflow to the next tick. `queued` dedups so a
+  // cell sits in at most one bucket. updateCell is idempotent + the setFluidBlock "changed"
+  // guard means re-processing is harmless (no remesh storm). Fast + smooth vs the old delay.
+  private readonly buckets: string[][] = Array.from({ length: FLUID_BUCKETS }, () => []);
+  private readonly queued = new Set<string>();
   private tickCounter = 0;
 
   constructor(world: World) {
@@ -31,11 +37,16 @@ export class FluidSim {
     return !!this.world.getChunk(worldToChunk(wx), worldToChunk(wz));
   }
 
+  private enqueueKey(key: string, delay: number): void {
+    if (this.queued.has(key)) return;
+    this.queued.add(key);
+    this.buckets[(this.tickCounter + delay) % FLUID_BUCKETS].push(key);
+  }
+
   enqueue(wx: number, wy: number, wz: number): void {
     if (wy < 0 || wy >= CY) return;
     if (!this.loaded(wx, wz)) return; // resumes when the chunk loads (rehydrate)
-    const key = `${wx},${wy},${wz}`;
-    if (!this.pending.has(key)) this.pending.set(key, this.tickCounter + FLUID_TICK_DELAY);
+    this.enqueueKey(`${wx},${wy},${wz}`, FLUID_TICK_DELAY);
   }
 
   enqueueAround(wx: number, wy: number, wz: number): void {
@@ -48,21 +59,62 @@ export class FluidSim {
     this.enqueue(wx, wy, wz - 1);
   }
 
-  // Process up to maxOps cells whose delay has elapsed.
+  // Drain this tick's bucket: process up to maxOps cells, defer the rest to next tick.
   tick(maxOps: number): void {
     this.tickCounter++;
-    const ready: string[] = [];
-    for (const [key, due] of this.pending) {
-      if (due <= this.tickCounter) {
-        ready.push(key);
-        if (ready.length >= maxOps) break;
+    const b = this.tickCounter % FLUID_BUCKETS;
+    const list = this.buckets[b];
+    this.buckets[b] = []; // swap out so updateCell's new enqueues don't grow this list
+    let ops = 0;
+    for (const key of list) {
+      this.queued.delete(key);
+      if (ops < maxOps) {
+        const c = key.split(',');
+        this.updateCell(+c[0], +c[1], +c[2]);
+        ops++;
+      } else {
+        this.enqueueKey(key, 1); // overflow -> next tick
       }
     }
-    for (const key of ready) {
-      this.pending.delete(key);
-      const c = key.split(',');
-      this.updateCell(+c[0], +c[1], +c[2]);
+  }
+
+  // Phase 16: horizontal flow direction at a cell = downhill gradient of the water surface
+  // height across the 4 neighbours (toward lower water / open air). ~0 in a still pool or a
+  // flat ocean (all sources at height 1.0). Used to push the player along a current.
+  flowAt(wx: number, wy: number, wz: number, out: { x: number; z: number }): void {
+    out.x = 0;
+    out.z = 0;
+    if (this.world.getBlockWorld(wx, wy, wz) !== Block.WATER) return;
+    const h = this.surfaceHeightAt(wx, wy, wz);
+    const dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ];
+    for (const [dx, dz] of dirs) {
+      const nb = this.world.getBlockWorld(wx + dx, wy, wz + dz);
+      if (nb !== Block.AIR && nb !== Block.WATER) continue; // wall: no flow that way
+      const nh = nb === Block.AIR ? 0 : this.surfaceHeightAt(wx + dx, wy, wz + dz);
+      const drop = h - nh;
+      if (drop > 0) {
+        out.x += dx * drop;
+        out.z += dz * drop;
+      }
     }
+    const len = Math.hypot(out.x, out.z);
+    if (len > 1e-4) {
+      out.x /= len;
+      out.z /= len;
+    } else {
+      out.x = 0;
+      out.z = 0;
+    }
+  }
+
+  private surfaceHeightAt(wx: number, wy: number, wz: number): number {
+    const above = this.world.getBlockWorld(wx, wy + 1, wz) === Block.WATER;
+    return fluidSurfaceHeight(Block.WATER, this.world.getFluidWorld(wx, wy, wz), above);
   }
 
   // Min incoming level (neighbor level + 1) over horizontal water neighbors, and
