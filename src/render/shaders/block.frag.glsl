@@ -30,6 +30,7 @@ uniform float uShadowTexel;
 // Phase 4b — planar reflective water. uReflectStrength == 0 -> disabled.
 uniform sampler2D uReflectMap;
 uniform float uReflectStrength;
+uniform vec3 uSkyReflect; // Phase 16.1 — sky colour for water reflection when no planar map
 
 // Phase 15.7/15.8 — dynamic torch/flare point lights (held + nearby placed). MAX must match
 // MAX_TORCH_LIGHTS in src/core/constants.ts. uTorchCount==0 -> the loop breaks immediately.
@@ -140,28 +141,48 @@ void main() {
   vec3 color = tex.rgb * lit * vTint; // vTint = biome colour (1,1,1 on non-foliage)
   float outA = tex.a;
 
-  // Planar reflective water (top faces only; vReflect baked at mesh time).
-  if (vReflect > 0.5 && uReflectStrength > 0.0) {
-    vec3 n = normalize(vWorldNormal);
+  // Phase 16.1: smooth, rippling, REFLECTIVE water surface (top faces; vReflect baked at mesh
+  // time: 1.0 = sea-level surface -> planar mirror, 0.4 = other water top -> sky reflection).
+  // Procedural world-space shading replaces the per-cell tile, so there's no grid: a deep base
+  // tint, a Fresnel-blended reflection (sky + terrain) distorted by world-space ripples, and a
+  // rippling sun glint. Looking straight down stays see-through; grazing reads as a mirror.
+  if (vReflect > 0.25) {
+    const float RIPPLE = 0.14;       // wave steepness (normal tilt)
+    const float REFLECT_FLOOR = 0.30; // base reflectivity even looking straight down
+    const float GLINT_POW = 200.0;    // sun-glint sharpness
+    const float WATER_ALPHA = 0.62;   // see the bottom looking down; opaque at grazing
+    const vec3 WATER_BASE = vec3(0.03, 0.10, 0.17); // deep water tint (linear-ish)
+
     vec3 v = normalize(cameraPosition - vWorldPos);
-    // Animated ripple distorts the projected reflection lookup.
-    vec2 ripple = vec2(
-      sin(vWorldPos.x * 0.6 + uTime * 1.3) + sin(vWorldPos.z * 0.8 - uTime * 1.1),
-      cos(vWorldPos.z * 0.6 + uTime * 1.0) + sin(vWorldPos.x * 0.7 + uTime * 0.9)
-    ) * 0.012;
-    vec2 ruv = vReflectCoord.xy / vReflectCoord.w + ripple;
-    vec3 refl = texture2D(uReflectMap, ruv).rgb;
+    vec2 p = vWorldPos.xz;
+    float t = uTime;
+    // World-space ripple normal — continuous across cells (no per-cell seams).
+    float rx = sin(p.x * 0.7 + t * 1.3) + 0.6 * sin((p.x + p.y) * 1.1 + t * 1.9) + 0.4 * sin(p.x * 1.9 - t * 2.3);
+    float rz = sin(p.y * 0.7 - t * 1.1) + 0.6 * sin((p.x - p.y) * 1.1 + t * 1.7) + 0.4 * sin(p.y * 1.9 + t * 2.1);
+    vec3 n = normalize(vec3(rx * RIPPLE, 1.0, rz * RIPPLE));
 
     float fres = pow(1.0 - max(dot(n, v), 0.0), 5.0);
-    fres = clamp(fres, 0.05, 1.0) * uReflectStrength;
+    fres = clamp(REFLECT_FLOOR + (1.0 - REFLECT_FLOOR) * fres, 0.0, 1.0);
 
-    // Sun specular glint (only while the sun is up).
-    vec3 r = reflect(-uSunDir, n);
-    float spec = pow(max(dot(r, v), 0.0), 120.0) * step(0.0, uSunDir.y) * uReflectStrength;
+    // Reflection colour: the real planar mirror at the sea-level surface (Cinematic), else a
+    // cheap sky-coloured reflection (Medium/Low + elevated water). Both rippled.
+    vec3 refl;
+    if (vReflect > 0.75 && uReflectStrength > 0.0) {
+      vec2 ruv = vReflectCoord.xy / vReflectCoord.w + vec2(rx, rz) * 0.02;
+      refl = texture2D(uReflectMap, ruv).rgb;
+    } else {
+      refl = uSkyReflect;
+    }
 
-    color = mix(color, refl, fres * 0.85);
-    color += spec * vec3(1.0, 0.96, 0.82);
-    outA = mix(tex.a, 1.0, fres * 0.5); // grazing water reads more solid/mirror-like
+    vec3 base = WATER_BASE * lit; // smooth base, dimmed by day/night world light
+    color = mix(base, refl, fres);
+
+    // Rippling sun glint (only while the sun is up).
+    vec3 rdir = reflect(-uSunDir, n);
+    float spec = pow(max(dot(rdir, v), 0.0), GLINT_POW) * step(0.0, uSunDir.y);
+    color += spec * vec3(1.0, 0.97, 0.85) * 1.3;
+
+    outA = mix(WATER_ALPHA, 1.0, fres);
   }
 
   // Underwater light absorption along the view ray: water removes red fastest with

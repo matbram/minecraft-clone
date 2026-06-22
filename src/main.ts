@@ -809,6 +809,7 @@ function frame(now: number): void {
   materials.shared.uFogDensity.value = dayNight.fogDensity * (1 - altT);
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
+  materials.shared.uSkyReflect.value.copy(dayNight.zenith); // Phase 16.1: water sky-reflection fallback
 
   // Phase 15.7/15.8 — dynamic torch/flare lights. Placed torches/flares use the SAME light
   // as the held one (so they match): gather the held torch/flare (unless a TORCH is

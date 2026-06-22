@@ -52,6 +52,9 @@ export interface Materials {
     uReflectMap: { value: THREE.Texture | null };
     uReflectMatrix: { value: THREE.Matrix4 };
     uReflectStrength: { value: number };
+    // Phase 16.1 — sky colour reflected by the water surface where the planar map isn't used
+    // (Medium/Low + non-sea-level water). Set from DayNight.zenith each frame.
+    uSkyReflect: { value: THREE.Color };
     // Phase 15.7/15.8 — dynamic torch/flare point lights (held + nearby placed). The shader
     // sums uTorchCount entries; uTorchCount=0 -> no contribution (loop early-out).
     uTorchPositions: { value: THREE.Vector3[] };
@@ -88,6 +91,7 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uReflectMap: { value: null as THREE.Texture | null },
     uReflectMatrix: { value: new THREE.Matrix4() },
     uReflectStrength: { value: 0 },
+    uSkyReflect: { value: new THREE.Color(0.5, 0.7, 0.95) },
     uTorchPositions: { value: Array.from({ length: MAX_TORCH_LIGHTS }, () => new THREE.Vector3()) },
     uTorchColors: { value: Array.from({ length: MAX_TORCH_LIGHTS }, () => new THREE.Color(TORCH_LIGHT_COLOR)) },
     uTorchCount: { value: 0 },

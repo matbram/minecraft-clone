@@ -88,10 +88,13 @@ const PAINTERS: Record<number, Painter> = {
   },
 
   // Water: blue with subtle ripples, semi-transparent (blended pass).
+  // Phase 16.1: near-uniform blue (no diagonal stripe) so the rare water SIDE faces don't
+  // show a per-cell woven grid. Water TOP surfaces are shaded procedurally in the block
+  // shader (smooth ripples + reflection), so this tile mostly affects sides/underwater.
   [Tile.WATER]: (ctx, x0, y0, rnd) => {
     for (let y = 0; y < TILE_PX; y++) {
       for (let x = 0; x < TILE_PX; x++) {
-        const f = 0.9 + Math.sin((x + y) * 0.9 + rnd()) * 0.06 + rnd() * 0.05;
+        const f = 0.96 + rnd() * 0.04; // faint per-pixel sparkle only, no directional pattern
         const c = shade({ r: 56, g: 110, b: 200 }, f);
         ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.72)`;
         ctx.fillRect(x0 + x, y0 + y, 1, 1);

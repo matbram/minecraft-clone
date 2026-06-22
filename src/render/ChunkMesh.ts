@@ -305,10 +305,11 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           }
           if (!draw) continue;
 
-          // Reflective only for an exposed water SOURCE top-face at the sea-level
-          // surface (face 2 = +Y, y === SEA_LEVEL -> top at WATER_SURFACE_Y). Only
-          // full sources (fluid===0) keep the reflection plane aligned.
-          const reflFlag = isWater && f === 2 && y === SEA_LEVEL && selfFluid === 0 ? 1 : 0;
+          // Phase 16.1: flag water TOP faces for the smooth reflective-surface shader path.
+          // 1.0 = sea-level source surface -> the planar reflection map (plane at
+          // WATER_SURFACE_Y); 0.4 = any other water top -> a cheap sky-coloured reflection.
+          // Non-water + water sides stay 0 (normal block rendering).
+          const reflFlag = isWater && f === 2 ? (y === SEA_LEVEL && selfFluid === 0 ? 1 : 0.4) : 0;
 
           // Biome tint: grass TOP faces + all leaf faces shift toward the biome
           // palette; every other face stays neutral (1,1,1).
