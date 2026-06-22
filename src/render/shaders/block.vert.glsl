@@ -2,25 +2,22 @@
 // are injected by three.js). `light` carries baked smooth lighting:
 //   x = sky light (0..1), y = block light (0..1), z = ambient occlusion (0..1).
 // `wave` = 1 for foliage vertices (visual sway only; collision uses block data).
-// `refl` = 1 for reflective water top faces (Phase 4b planar reflection).
+// (Phase 17: water is its own surface mesh/material now — the old per-face water
+// reflection attribute/varyings were removed from the block shader.)
 
 attribute vec3 light;
 attribute float wave;
-attribute float refl;
 attribute vec3 tint; // Phase 12: per-vertex biome colour multiplier (1,1,1 = none)
 
 uniform float uTime;
 uniform float uWind;
 uniform float uWindSpeed;
-uniform mat4 uReflectMatrix; // Phase 4b: world -> reflection texture (projective)
 
 varying vec2 vUv;
 varying vec3 vLight;
 varying float vFogDepth;
-varying vec3 vWorldPos;    // Phase 4b: shadow projection + water Fresnel
+varying vec3 vWorldPos;    // Phase 4b: shadow projection
 varying vec3 vWorldNormal; // Phase 4b: chunk model matrix is translation-only
-varying float vReflect;
-varying vec4 vReflectCoord;
 varying vec3 vTint;
 
 void main() {
@@ -44,8 +41,6 @@ void main() {
   vec4 worldPos = modelMatrix * vec4(pos, 1.0);
   vWorldPos = worldPos.xyz;
   vWorldNormal = normalize(mat3(modelMatrix) * normal);
-  vReflect = refl;
-  vReflectCoord = uReflectMatrix * worldPos;
 
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
   vFogDepth = -mv.z;

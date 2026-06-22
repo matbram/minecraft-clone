@@ -25,7 +25,6 @@ export interface MeshArrays {
   light: Float32Array; // 3 floats/vertex: sky, block, ao
   uvs: Float32Array;
   wave: Float32Array; // 1 float/vertex: 1 = foliage (waves), 0 = static
-  refl: Float32Array; // 1 float/vertex: 1 = reflective water top face, 0 = other
   tint: Float32Array; // 3 floats/vertex: biome colour multiplier (1,1,1 = none)
   indices: Uint32Array;
 }
@@ -73,14 +72,13 @@ interface Accum {
   light: number[];
   uvs: number[];
   wave: number[];
-  refl: number[];
   tint: number[];
   indices: number[];
   count: number;
 }
 
 function newAccum(): Accum {
-  return { positions: [], normals: [], light: [], uvs: [], wave: [], refl: [], tint: [], indices: [], count: 0 };
+  return { positions: [], normals: [], light: [], uvs: [], wave: [], tint: [], indices: [], count: 0 };
 }
 
 function finalize(a: Accum): MeshArrays | null {
@@ -91,7 +89,6 @@ function finalize(a: Accum): MeshArrays | null {
     light: new Float32Array(a.light),
     uvs: new Float32Array(a.uvs),
     wave: new Float32Array(a.wave),
-    refl: new Float32Array(a.refl),
     tint: new Float32Array(a.tint),
     indices: new Uint32Array(a.indices),
   };
@@ -180,7 +177,6 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         opaque.light.push(sky, blk, 1);
         opaque.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
         opaque.wave.push(wave);
-        opaque.refl.push(0);
         opaque.tint.push(tr, tg, tb);
       }
       opaque.indices.push(base, base + 1, base + 2, base, base + 2, base + 3); // front
@@ -292,11 +288,6 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           }
           if (!draw) continue;
 
-          // Phase 17: water TOP faces are gone (the WaterSurfaceMesh sheet draws + shades the
-          // surface now), so the block-shader reflective-water branch is unused -> refl = 0
-          // everywhere. (The attribute is kept for now; cleanup is deferred to Stage 17.5.)
-          const reflFlag = 0;
-
           // Biome tint: grass TOP faces + all leaf faces shift toward the biome
           // palette; every other face stays neutral (1,1,1).
           let tr = 1;
@@ -388,7 +379,6 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
             const cv = face.uv[i][1];
             acc.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
             acc.wave.push(waveFlag);
-            acc.refl.push(reflFlag);
             acc.tint.push(tr, tg, tb);
           }
 
