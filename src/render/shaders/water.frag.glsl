@@ -140,7 +140,8 @@ void main() {
   float churn = 0.5 + 0.5 * sin(p.x * 6.0 + p.y * 5.0 + t * 3.0);
   foam *= 0.6 + 0.4 * churn;
   foam = smoothstep(0.15, 0.9, foam);
-  vec3 foamCol = vec3(0.78, 0.86, 0.9) * (0.4 + 0.6 * lightLevel);
+  // Track the available light so foam is bright by day but doesn't glow on a night ocean.
+  vec3 foamCol = vec3(0.78, 0.86, 0.9) * (0.1 + 0.9 * lightLevel);
   color = mix(color, foamCol, foam);
   alpha = max(alpha, foam);
 
