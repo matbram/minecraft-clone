@@ -14,6 +14,11 @@ import {
   TORCH_LIGHT_RANGE,
   TORCH_LIGHT_INTENSITY,
   MAX_TORCH_LIGHTS,
+  WATER_DEPTH_FADE,
+  WATER_SHALLOW_COLOR,
+  WATER_DEEP_COLOR,
+  WATER_FOAM_WIDTH,
+  WATER_NORMAL_SCROLL,
 } from '../core/constants';
 import vertexShader from './shaders/block.vert.glsl?raw';
 import fragmentShader from './shaders/block.frag.glsl?raw';
@@ -62,6 +67,22 @@ export interface Materials {
     uTorchCount: { value: number };
     uTorchRange: { value: number };
     uTorchIntensity: { value: number };
+    // Phase 17 — continuous water surface. The water shader (WaterMaterial) shares
+    // this block. Scene capture (Cinematic only) feeds refraction + true depth colour;
+    // null + uCameraNear/Far=0 means "no capture" -> the shader falls back to the
+    // mesh-baked depthHint. Nothing reads these until Stage 17.1+.
+    uSceneColor: { value: THREE.Texture | null };
+    uSceneDepth: { value: THREE.Texture | null };
+    uInvProjection: { value: THREE.Matrix4 };
+    uCameraNear: { value: number };
+    uCameraFar: { value: number };
+    uResolution: { value: THREE.Vector2 };
+    // Water look tunables (mirror the constants; live-adjustable later).
+    uWaterDepthFade: { value: number };
+    uWaterShallow: { value: THREE.Color };
+    uWaterDeep: { value: THREE.Color };
+    uWaterFoamWidth: { value: number };
+    uWaterNormalScroll: { value: number };
   };
 }
 
@@ -97,6 +118,17 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uTorchCount: { value: 0 },
     uTorchRange: { value: TORCH_LIGHT_RANGE },
     uTorchIntensity: { value: TORCH_LIGHT_INTENSITY },
+    uSceneColor: { value: null as THREE.Texture | null },
+    uSceneDepth: { value: null as THREE.Texture | null },
+    uInvProjection: { value: new THREE.Matrix4() },
+    uCameraNear: { value: 0 },
+    uCameraFar: { value: 0 },
+    uResolution: { value: new THREE.Vector2(1, 1) },
+    uWaterDepthFade: { value: WATER_DEPTH_FADE },
+    uWaterShallow: { value: new THREE.Color(WATER_SHALLOW_COLOR) },
+    uWaterDeep: { value: new THREE.Color(WATER_DEEP_COLOR) },
+    uWaterFoamWidth: { value: WATER_FOAM_WIDTH },
+    uWaterNormalScroll: { value: WATER_NORMAL_SCROLL },
   };
 
   const opaque = new THREE.ShaderMaterial({

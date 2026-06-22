@@ -349,3 +349,20 @@ export const FLUID_FALLING = 0x10; // falling-bit in the fluid byte (4-bit level
 export const FLUID_LEVEL_MASK = 0x0f;
 // Phase 16: visual top height is computed (continuous) in fluid.ts from the level; the
 // renderer corner-averages neighbours for a smooth sloped surface.
+
+// ---------------------------------------------------------------------------
+// Phase 17: continuous water surface (real shader-pack-style water). The water
+// SURFACE is a dedicated heightfield mesh (WaterSurfaceMesh) drawn with its own
+// shader (animated normals, reflection, depth colour, edge foam) so standing,
+// flowing, river, waterfall and a filling crater all read as ONE fluid — no
+// per-cell cube tops. Cinematic adds a half-res scene capture for true
+// refraction + depth-based colour/transparency + intersection foam. Medium/Low
+// use a mesh-baked depthHint + sky reflection (no capture → ~60fps).
+// ---------------------------------------------------------------------------
+export const WATER_SURFACE_DOWNSCALE = 0.5; // scene-capture render-target scale (Cinematic refraction)
+export const WATER_DEPTH_FADE = 8; // blocks of water thickness over which colour ramps shallow→deep
+export const WATER_SHALLOW_COLOR = 0x2e8fb0; // clear cyan over a shallow bottom
+export const WATER_DEEP_COLOR = 0x0a2e44; // deep ocean blue where the column is thick
+export const WATER_FOAM_WIDTH = 0.85; // blocks of thickness near zero that read as shoreline/edge foam
+export const WATER_NORMAL_SCROLL = 0.045; // base ripple-normal scroll speed (flow biases direction)
+export const MAX_WATER_MESH_PER_FRAME = 6; // water sheets (re)built per frame (lighter than block meshes)

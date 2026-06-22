@@ -27,6 +27,11 @@ export interface QualitySettings {
   planet: boolean; // Phase 12.5b: curved planet backdrop + atmospheric limb in space
   shadows: boolean; // Cinematic only: real-time sun shadows
   waterReflections: boolean; // Cinematic only: planar water reflection
+  // Phase 17: continuous water-surface mesh (all presets) + Cinematic-only scene
+  // capture for true refraction + depth colour + intersection foam.
+  waterSurface: boolean;
+  waterRefraction: boolean; // Cinematic only: scene-capture refraction + depth colour
+  waterFoam: boolean; // Cinematic only: shoreline/edge intersection foam
   renderDistance: number;
 }
 
@@ -45,6 +50,9 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     planet: false,
     shadows: false,
     waterReflections: false,
+    waterSurface: true,
+    waterRefraction: false,
+    waterFoam: false,
     renderDistance: RENDER_DISTANCE_LOW,
   },
   [Preset.MEDIUM]: {
@@ -61,6 +69,9 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     planet: true,
     shadows: false,
     waterReflections: false,
+    waterSurface: true,
+    waterRefraction: false,
+    waterFoam: false,
     renderDistance: RENDER_DISTANCE_MED,
   },
   [Preset.CINEMATIC]: {
@@ -77,6 +88,9 @@ export const PRESETS: Record<Preset, QualitySettings> = {
     planet: true,
     shadows: true,
     waterReflections: true,
+    waterSurface: true,
+    waterRefraction: true,
+    waterFoam: true,
     renderDistance: RENDER_DISTANCE_CINEMATIC,
   },
 };
