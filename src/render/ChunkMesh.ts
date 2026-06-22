@@ -147,9 +147,11 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
   // water cell directly above (full-height column).
   const waterHeightAt = (wx: number, wy: number, wz: number): number =>
     fluidSurfaceHeight(Block.WATER, fluidAt(wx, wy, wz), blockAt(wx, wy + 1, wz) === Block.WATER);
-  // Phase 16: smoothed surface — a top corner's height is the average of the water columns
-  // meeting at it (self + 2 edges + the diagonal), so adjacent flowing levels read as a
-  // continuous slope instead of stepped cubes. cx/cz in {0,1} pick the corner of cell (wx,wz).
+  // Phase 16/16.2a: smoothed surface — a top corner's height is the average of the water
+  // columns meeting at it, sampled ACROSS one Y step so a 1-block down-step (crater rim, shore,
+  // cascade) ramps into a slope instead of a hard cube step. Returns an elevation offset in
+  // [0,1] relative to cell base wy (a lower neighbour at wy-1 pulls the corner down; a taller
+  // neighbour reads 1.0 and pulls it up). cx/cz in {0,1} pick the corner of cell (wx,wz).
   const cornerHeightAt = (wx: number, wy: number, wz: number, cx: number, cz: number): number => {
     const sx = cx === 1 ? 1 : -1;
     const sz = cz === 1 ? 1 : -1;
@@ -157,12 +159,18 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
     let n = 0;
     const offs = [[0, 0], [sx, 0], [0, sz], [sx, sz]];
     for (const [ox, oz] of offs) {
-      if (blockAt(wx + ox, wy, wz + oz) === Block.WATER) {
-        sum += waterHeightAt(wx + ox, wy, wz + oz);
+      const nx = wx + ox;
+      const nz = wz + oz;
+      if (blockAt(nx, wy, nz) === Block.WATER) {
+        sum += waterHeightAt(nx, wy, nz); // same layer (taller column reads 1.0)
+        n++;
+      } else if (blockAt(nx, wy, nz) === Block.AIR && blockAt(nx, wy - 1, nz) === Block.WATER) {
+        sum += -1 + waterHeightAt(nx, wy - 1, nz); // one step down -> ramp toward it
         n++;
       }
     }
-    return n > 0 ? sum / n : 1.0;
+    if (n === 0) return 1.0;
+    return Math.max(0, Math.min(1, sum / n));
   };
 
   const opaque = newAccum();

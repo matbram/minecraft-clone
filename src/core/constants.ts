@@ -220,7 +220,8 @@ export const SWIM_ACCEL = 22; // horizontal accel in water
 export const WATER_DRAG = 0.8; // horizontal water friction (no input)
 
 export const UNDERWATER_FOG_DENSITY = 0.04; // shallow: clear & sunlit, see a good distance
-export const UNDERWATER_FOG_COLOR = 0x3f86a0; // lit cyan near the surface (not a black void)
+export const UNDERWATER_FOG_COLOR = 0x4fb6d6; // Phase 16.2b: brighter lit cyan volume near the surface
+export const WATER_TRANSITION_BAND = 0.6; // Phase 16.2c: blocks over which the underwater look fades in
 
 // Phase 7b/9: underwater. Murk/darkening ramps with how deep the eye is below
 // WATER_SURFACE_Y (over UNDERWATER_MAX_DEPTH): clear & shaft-lit shallow -> moody
@@ -240,9 +241,9 @@ export const UNDERWATER_LIGHT_DEPTH = 20; // blocks over which surface light (sk
 export const UNDERWATER_COLOR_DEPTH = 16; // water-above (blocks) for full deep-color + sky fade
 export const UNDERWATER_VISIBILITY_DENSITY = 0.05; // constant per-meter view fog (clarity)
 export const UW_VEIL_BASE = 0.45; // screen-tint veil strength (scaled by available light)
-export const UNDERWATER_PARTICLES = 160; // drifting motes/plankton count
+export const UNDERWATER_PARTICLES = 220; // Phase 16.2b: more drifting motes/plankton for the volumetric feel
 export const WATER_SURFACE_VISIBILITY = 0.85; // how visible the surface ceiling is from below (tunable)
-export const WATER_CEILING_CYAN = 0x6fd0e8; // bright lit cyan of the surface seen from below
+export const WATER_CEILING_CYAN = 0x8fe8f5; // Phase 16.2b: brighter lit cyan of the surface seen from below
 export const WATER_CEILING_EDGE = 0x0b3a55; // ocean-blue toward grazing/edges (built-in vignette)
 
 // ---------------------------------------------------------------------------

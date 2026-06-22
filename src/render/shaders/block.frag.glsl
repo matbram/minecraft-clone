@@ -135,7 +135,7 @@ void main() {
   if (uUnderwater > 0.5) {
     float up = max(normalize(vWorldNormal).y, 0.0);
     float c = caustics(vWorldPos.xz, uTime);
-    lit += vec3(c * up * vLight.x * uDayFactor * 0.22 * (1.0 - uUnderwaterDepth));
+    lit += vec3(c * up * vLight.x * uDayFactor * 0.34 * (1.0 - uUnderwaterDepth)); // 16.2b: brighter dancing caustics
   }
 
   vec3 color = tex.rgb * lit * vTint; // vTint = biome colour (1,1,1 on non-foliage)
@@ -148,9 +148,9 @@ void main() {
   // rippling sun glint. Looking straight down stays see-through; grazing reads as a mirror.
   if (vReflect > 0.25) {
     const float RIPPLE = 0.14;       // wave steepness (normal tilt)
-    const float REFLECT_FLOOR = 0.30; // base reflectivity even looking straight down
+    const float REFLECT_FLOOR = 0.40; // base reflectivity even looking straight down (16.2a: hide blocky bottom)
     const float GLINT_POW = 200.0;    // sun-glint sharpness
-    const float WATER_ALPHA = 0.62;   // see the bottom looking down; opaque at grazing
+    const float WATER_ALPHA = 0.70;   // see the bottom looking down; opaque at grazing
     const vec3 WATER_BASE = vec3(0.03, 0.10, 0.17); // deep water tint (linear-ish)
 
     vec3 v = normalize(cameraPosition - vWorldPos);

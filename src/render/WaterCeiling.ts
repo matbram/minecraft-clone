@@ -49,7 +49,7 @@ const fragmentShader = /* glsl */ `
     // Dome colour: ocean-blue at grazing edges -> bright cyan toward the window ->
     // near-white in the centre. This bright-centre / dark-rim IS the reference vignette.
     vec3 base = mix(uDeepColor, uSurfaceColor, smoothstep(0.0, 0.7, up));
-    vec3 col = mix(base, vec3(1.0), win * 0.7);
+    vec3 col = mix(base, vec3(1.0), win); // 16.2b: brighter Snell window (whiter centre)
     col += (ripple + glint * 0.6) * (0.3 + 0.7 * win); // ripples sparkle most near the window
     col *= (0.4 + 0.6 * uFade);                         // dim at night, full in daylight
 

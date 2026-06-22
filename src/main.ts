@@ -16,6 +16,7 @@ import {
   WATER_CEILING_EDGE,
   UNDERWATER_COLOR_DEPTH,
   UNDERWATER_PARTICLES,
+  WATER_TRANSITION_BAND,
   MAX_FLUID_OPS_PER_TICK,
   MAX_FIRE_OPS_PER_TICK,
   FIRE_PARTICLE_CULL,
@@ -240,6 +241,7 @@ const tpAway = new THREE.Vector3(); // scratch: direction from eye to the third-
 const TORCH_COL = new THREE.Color(TORCH_LIGHT_COLOR);
 const FLARE_COL = new THREE.Color(FLARE_LIGHT_COLOR);
 const TORCH_GATHER_D2 = TORCH_LIGHT_GATHER_DIST * TORCH_LIGHT_GATHER_DIST;
+const tmpFog = new THREE.Color(); // Phase 16.2c: scratch for the underwater fog crossfade
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -731,6 +733,7 @@ function frame(now: number): void {
   let depthFrac = 0;
   let uwBright = 0;
   let eyeWaterAbove = 0; // water blocks above the eye (for the waterline split)
+  let submersion = 0; // Phase 16.2c: 0..1 ramp of the underwater LOOK across the waterline (no pop)
   if (submerged) {
     const ex = Math.floor(camera.position.x);
     const ey = Math.floor(camera.position.y);
@@ -739,6 +742,10 @@ function frame(now: number): void {
     depthFrac = Math.min(eyeWaterAbove / UNDERWATER_COLOR_DEPTH, 1);
     const downwell = Math.exp(-Tunables.waterAbsorb * eyeWaterAbove); // open-column darkening
     uwBright = Math.min(world.brightnessAt(ex, ey, ez, fxSkyMul) * downwell, 1);
+    // How far the eye sits below the local surface -> fade the underwater visuals in over a
+    // small band so dipping just under doesn't snap (the "paper-thin surface" pop).
+    const surfaceY = Math.floor(camera.position.y) + eyeWaterAbove;
+    submersion = Math.min(1, Math.max(0, (surfaceY - camera.position.y) / WATER_TRANSITION_BAND));
   }
   const lightFade = depthFrac; // surface light (sky/sun/rays) fades with local depth
 
@@ -846,13 +853,17 @@ function frame(now: number): void {
   if (submerged) {
     const shallow = settings.usePost ? uwFogColorLinear : uwFogColorSRGB;
     const deep = settings.usePost ? uwDeepColorLinear : uwDeepColorSRGB;
-    materials.shared.uFogColor.value.copy(shallow).lerp(deep, depthFrac).multiplyScalar(uwBright);
-    materials.shared.uFogDensity.value = Tunables.underwaterDensity;
+    // Phase 16.2c: lerp the sky fog -> underwater fog by `submersion` so it fades in across
+    // the waterline instead of snapping.
+    tmpFog.copy(shallow).lerp(deep, depthFrac).multiplyScalar(uwBright);
+    materials.shared.uFogColor.value.lerp(tmpFog, submersion);
+    materials.shared.uFogDensity.value = THREE.MathUtils.lerp(materials.shared.uFogDensity.value, Tunables.underwaterDensity, submersion);
   }
   materials.shared.uUnderwater.value = submerged ? 1 : 0;
   materials.shared.uUnderwaterDepth.value = depthFrac;
-  // Screen veil: tunable tint strength, scaled by the real available light here.
-  underwaterOverlay.setIntensity(submerged ? Tunables.underwaterTint * uwBright : 0);
+  // Screen veil: tunable tint strength, scaled by the real available light here + the
+  // crossing ramp (Phase 16.2c) so it fades in rather than popping.
+  underwaterOverlay.setIntensity(submerged ? Tunables.underwaterTint * uwBright * submersion : 0);
   // Half-submerged waterline (Phase 11.5): when the eye sits just under the local
   // surface, split the veil so the bottom is tinted and the top is clear; the divider
   // follows look-pitch (look up -> less water). Null = full tint / off.
@@ -869,7 +880,8 @@ function frame(now: number): void {
     const sx = Math.floor(camera.position.x);
     const sz = Math.floor(camera.position.z);
     const surfaceLight = world.brightnessAt(sx, surfaceY, sz, fxSkyMul);
-    const ceilFade = surfaceLight * (1 - 0.45 * depthFrac);
+    // 16.2b: smaller depth penalty (brighter window deeper); 16.2c: fade in across the surface.
+    const ceilFade = surfaceLight * (1 - 0.25 * depthFrac) * submersion;
     waterCeiling.update(
       camera.position,
       surfaceY,
@@ -883,9 +895,10 @@ function frame(now: number): void {
     waterCeiling.hide();
   }
   underwaterOverlay.setWaterline(waterline);
-  // Caustic dapple fades with depth (shallow+lit shimmers most).
-  const uwCaustic = submerged ? (1 - depthFrac) * uwBright : 0;
-  composer.setUnderwater(submerged ? 0.12 + 0.88 * depthFrac : 0, now / 1000, uwCaustic, 0);
+  // Caustic dapple fades with depth (shallow+lit shimmers most); both the dapple + the cyan
+  // grade ramp in across the waterline (16.2c) and the grade is stronger overall (16.2b).
+  const uwCaustic = submerged ? (1 - depthFrac) * uwBright * submersion : 0;
+  composer.setUnderwater(submerged ? (0.25 + 0.75 * depthFrac) * submersion : 0, now / 1000, uwCaustic, 0);
   composer.setExposure(Tunables.brightness); // live "Brightness" knob (post path)
   underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
@@ -930,7 +943,7 @@ function frame(now: number): void {
       // scaled by how lit it is here so they stay faint at night / in caves).
       if (submerged) {
         tmpSunUv.x += Math.sin(now / 1000 * 0.6) * 0.03;
-        intensity *= 1 + 0.4 * uwBright;
+        intensity *= 1 + 0.9 * uwBright; // 16.2b: stronger god-ray shafts underwater
       }
       // No atmosphere to scatter in vacuum: the shafts fade out as you reach space.
       intensity *= 1 - altT;

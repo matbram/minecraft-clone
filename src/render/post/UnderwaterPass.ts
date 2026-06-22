@@ -32,17 +32,17 @@ export function createUnderwaterPass(): ShaderPass {
         uv.y += cos(uv.x * 20.0 + uTime * 1.9) * 0.0035 * uStrength;
         uv = clamp(uv, 0.0, 1.0);
         vec3 col = texture2D(tDiffuse, uv).rgb;
-        // Cohesive cyan cast — strong and present even in shallow water (a real
-        // snorkelling view is saturated blue, not faintly tinted).
-        float g = clamp(0.45 + 0.4 * uStrength, 0.0, 0.85);
-        col = mix(col, col * vec3(0.30, 0.62, 0.95), g);
+        // Phase 16.2b: vivid cyan volume — a strong, saturated cyan cast even in shallow
+        // water (matches the reference snorkelling look, not a faint tint).
+        float g = clamp(0.55 + 0.4 * uStrength, 0.0, 0.92);
+        col = mix(col, col * vec3(0.20, 0.70, 1.0), g);
 
         // Drifting caustic dapple: sparse moving highlights over the whole view so the
         // water reads as a lit volume, not a flat tint.
         float ca = sin((vUv.x + vUv.y) * 18.0 + uTime * 1.2)
                  + sin((vUv.x - vUv.y) * 15.0 - uTime * 0.9);
         ca = smoothstep(0.7, 2.0, ca * 0.5 + 1.0);
-        col *= 1.0 + ca * 0.16 * uCaustic;
+        col *= 1.0 + ca * 0.28 * uCaustic;
 
         // Strong vignette, tinted to deep ocean-blue at the edges (the dark rim framing
         // the bright Snell window in the reference) rather than a plain darken.
