@@ -51,6 +51,7 @@ import { buildAtlas } from './render/atlas';
 import { buildCrackAtlas } from './render/crackAtlas';
 import { createMaterials } from './render/materials';
 import { createWaterMaterial } from './render/water/WaterMaterial';
+import { SceneCapture } from './render/water/SceneCapture';
 import { ChunkRenderer } from './render/ChunkRenderer';
 import { ChunkManager } from './game/ChunkManager';
 import { Input } from './player/Input';
@@ -305,6 +306,7 @@ const spaceLayer = new SpaceLayer(scene, seed); // Phase 12.5b: planet backdrop 
 const composer = new Composer(renderer, scene, camera, settings);
 const shadowMapper = new ShadowMapper(materials.shared);
 const planarReflection = new PlanarReflection(materials.shared);
+const sceneCapture = new SceneCapture(materials.shared); // Phase 17: Cinematic water refraction
 const tmpSunUv = new THREE.Vector3();
 
 // Phase 5/7b: underwater tint + fog override + drifting motes. Precompute both
@@ -551,6 +553,7 @@ window.addEventListener('resize', () => {
   renderer.setSize(w, h);
   composer.setSize(w, h, Math.min(window.devicePixelRatio, 2));
   planarReflection.setSize(w, h);
+  sceneCapture.setSize(w, h);
 });
 
 // --- persistence -----------------------------------------------------------
@@ -929,6 +932,10 @@ function frame(now: number): void {
   // too, then the planar water reflection. Both restore render target/override.
   if (settings.shadows) shadowMapper.render(renderer, scene, camera.position, dayNight);
   if (settings.waterReflections) planarReflection.render(renderer, scene, camera);
+  // Phase 17 (Cinematic): capture the opaque scene + depth for water refraction. Skip
+  // when submerged (the surface is back-face culled from below; WaterCeiling handles it).
+  if (settings.waterRefraction && !submerged) sceneCapture.capture(renderer, scene, camera);
+  else sceneCapture.setActive(false);
 
   if (settings.usePost) {
     if (settings.godRays) {
