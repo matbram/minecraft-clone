@@ -53,6 +53,8 @@ export enum Block {
   // FLAMETHROWER is a held weapon (never placed/meshed — procedural icon).
   TORCH,
   FLAMETHROWER,
+  // Phase 15.8: FLARE — the underwater-capable torch variant (red flame; survives water).
+  FLARE,
   COUNT,
 }
 
@@ -109,10 +111,11 @@ export const Tile = {
   SEAGRASS: 31,
   CORAL: 32,
   FIRE: 33, // Phase 15: explosion fire (cross-billboard, emissive)
-  TORCH: 34, // Phase 15.5: placeable torch (stick + flame, emissive)
+  TORCH: 34, // Phase 15.5: placeable torch (stick only; flame is a particle renderer)
+  FLARE: 35, // Phase 15.8: underwater flare (red stick; flame is a particle renderer)
 } as const;
 
-export const ATLAS_TILES = 35; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
+export const ATLAS_TILES = 36; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -184,12 +187,26 @@ export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
   IS_SOLID[Block.FLAMETHROWER] = 0;
   IS_TRANSPARENT[Block.FLAMETHROWER] = 1;
 
-  // Phase 15.5: TORCH — placeable light source, rendered as a small cross billboard (a
-  // stick + flame). Non-solid, transparent, emits light 14, and does NOT wave (IS_FOLIAGE 0).
+  // Phase 15.5/15.8: TORCH — placeable light source, rendered as a small cross billboard
+  // (just the stick; the flame is particles). Non-solid, transparent, does NOT wave.
+  // Phase 15.8: torch light is now a DYNAMIC shader light (matching the held torch), so the
+  // baked block emission is 0 (no double-lighting). FLARE is the underwater variant.
   IS_CROSS[Block.TORCH] = 1;
   IS_SOLID[Block.TORCH] = 0;
   IS_TRANSPARENT[Block.TORCH] = 1;
-  LIGHT_EMISSION[Block.TORCH] = 14;
+  LIGHT_EMISSION[Block.TORCH] = 0;
+  IS_CROSS[Block.FLARE] = 1;
+  IS_SOLID[Block.FLARE] = 0;
+  IS_TRANSPARENT[Block.FLARE] = 1;
+  LIGHT_EMISSION[Block.FLARE] = 0;
+})();
+
+// Phase 15.8: torch-like blocks (TORCH + FLARE) share the dynamic-light + particle-flame
+// path and the R-switch. FLARE additionally works underwater and survives water.
+export const IS_TORCHLIKE = new Uint8Array(BLOCK_COUNT);
+(function initTorchlike() {
+  IS_TORCHLIKE[Block.TORCH] = 1;
+  IS_TORCHLIKE[Block.FLARE] = 1;
 })();
 
 // ---------------------------------------------------------------------------
@@ -305,6 +322,7 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.CORAL, Tile.CORAL);
   setAllFaces(Block.FIRE, Tile.FIRE);
   setAllFaces(Block.TORCH, Tile.TORCH);
+  setAllFaces(Block.FLARE, Tile.FLARE);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -352,6 +370,7 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.CORAL] = 0.3;
   HARDNESS[Block.FIRE] = 0; // temporary; instantly clears if targeted
   HARDNESS[Block.TORCH] = 0; // instant break (place freely while exploring)
+  HARDNESS[Block.FLARE] = 0; // instant break
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -394,6 +413,7 @@ export const PLACEABLE: Block[] = [
   Block.SEAGRASS,
   Block.CORAL,
   Block.TORCH,
+  Block.FLARE,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).

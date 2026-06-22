@@ -9,9 +9,11 @@
 // Exports TorchFlame + buildHeldItem so the third-person PlayerModel reuses them.
 
 import * as THREE from 'three';
-import { Block, IS_WEAPON, IS_EDIBLE, ATLAS_COLS, tileOf } from '../core/BlockTypes';
+import { Block, IS_WEAPON, IS_EDIBLE, IS_TORCHLIKE, ATLAS_COLS, tileOf } from '../core/BlockTypes';
 import { ATLAS_ROWS } from '../render/atlas';
-import { flameColor } from './FireRenderer';
+import { flameColor, flareColor } from './FireRenderer';
+
+type ColorRamp = (out: THREE.Color, t: number) => void;
 
 const TAU = Math.PI * 2;
 const SKIN = 0x9c6b4a;
@@ -37,8 +39,10 @@ export class TorchFlame {
   private readonly height: number;
   private readonly radius: number;
   private readonly size: number;
+  private readonly ramp: ColorRamp;
 
-  constructor(scale = 1, cubes = 12) {
+  constructor(scale = 1, cubes = 12, ramp: ColorRamp = flameColor) {
+    this.ramp = ramp;
     this.height = 0.34 * scale;
     this.radius = 0.07 * scale;
     this.size = 0.075 * scale;
@@ -70,7 +74,7 @@ export class TorchFlame {
       this.s.set(sc, sc, sc);
       this.m.compose(this.p, this.q, this.s);
       this.mesh.setMatrixAt(k, this.m);
-      flameColor(this.c, rise);
+      this.ramp(this.c, rise);
       this.c.multiplyScalar((0.8 + 0.3 * flick) * env);
       this.mesh.setColorAt(k, this.c);
     }
@@ -112,6 +116,11 @@ function box(w: number, h: number, l: number, color: number): THREE.Mesh {
 export function buildHeldItem(block: Block, atlas: THREE.Texture): THREE.Object3D {
   if (block === Block.TORCH) {
     const stick = box(0.07, STICK_LEN, 0.07, 0x5a3a1c);
+    stick.name = 'stick';
+    return stick;
+  }
+  if (block === Block.FLARE) {
+    const stick = box(0.08, STICK_LEN, 0.08, 0xcc2c3a); // red flare body
     stick.name = 'stick';
     return stick;
   }
@@ -183,14 +192,15 @@ export class ViewModel {
     obj.position.set(0.08, 0.06, 0.02);
     this.hand.add(obj);
     this.item = obj;
-    if (block === Block.TORCH) {
-      this.flame = new TorchFlame(1.1, 12);
+    if (IS_TORCHLIKE[block]) {
+      this.flame = new TorchFlame(1.1, 12, block === Block.FLARE ? flareColor : flameColor);
       this.flame.group.position.set(0.08, 0.06 + STICK_LEN / 2, 0.02); // stick tip
       this.hand.add(this.flame.group);
     }
   }
 
   // visible: first-person only. speed: player horizontal speed (drives the walk bob).
+  // lit: whether the held flame burns (false when a TORCH is submerged -> extinguished).
   // emberAt: spawns a world-space ember (Effects.fireEmber) at the torch tip.
   update(
     dt: number,
@@ -198,6 +208,7 @@ export class ViewModel {
     block: Block,
     visible: boolean,
     speed: number,
+    lit: boolean,
     emberAt: (x: number, y: number, z: number) => void,
   ): void {
     this.group.visible = visible;
@@ -212,12 +223,15 @@ export class ViewModel {
     this.hand.rotation.x = -Math.sin(this.swing * Math.PI) * 0.9;
 
     if (this.flame) {
-      this.flame.update(time);
-      // Drifting embers in world space (computed from the tip's true world position).
-      this.flame.group.updateWorldMatrix(true, false);
-      if (Math.random() < 0.35) {
-        this.flame.group.getWorldPosition(this.tipWorld);
-        emberAt(this.tipWorld.x, this.tipWorld.y, this.tipWorld.z);
+      this.flame.group.visible = lit; // extinguished (e.g. torch underwater) -> no flame
+      if (lit) {
+        this.flame.update(time);
+        // Drifting embers in world space (computed from the tip's true world position).
+        this.flame.group.updateWorldMatrix(true, false);
+        if (Math.random() < 0.35) {
+          this.flame.group.getWorldPosition(this.tipWorld);
+          emberAt(this.tipWorld.x, this.tipWorld.y, this.tipWorld.z);
+        }
       }
     }
   }

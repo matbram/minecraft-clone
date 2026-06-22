@@ -15,7 +15,8 @@ import {
   TORCH_FLAME_RADIUS,
   TORCH_FLAME_CUBE_SIZE,
 } from '../core/constants';
-import { flameColor } from './FireRenderer';
+import { flameColor, flareColor } from './FireRenderer';
+import { Block } from '../core/BlockTypes';
 import type { World } from '../world/World';
 
 const RENDER_D2 = TORCH_RENDER_DISTANCE * TORCH_RENDER_DISTANCE;
@@ -56,8 +57,9 @@ export class TorchRenderer {
     const cy = camera.position.y;
     const cz = camera.position.z;
 
-    world.forEachTorch((x, y, z) => {
+    world.forEachTorch((x, y, z, block) => {
       if (this.n >= MAX_TORCH_CUBES) return;
+      const ramp = block === Block.FLARE ? flareColor : flameColor;
       const fx = x + 0.5;
       const fy = y + TORCH_FLAME_BASE_Y;
       const fz = z + 0.5;
@@ -82,7 +84,7 @@ export class TorchRenderer {
         const ox = Math.cos(ang) * rad;
         const oz = Math.sin(ang) * rad;
         const sc = Math.max(0.001, TORCH_FLAME_CUBE_SIZE * (1 - 0.5 * rise) * flick * env);
-        flameColor(this.col, rise);
+        ramp(this.col, rise);
         this.col.multiplyScalar((0.8 + 0.3 * flick) * env);
         this.write(fx + ox, fy + rise * TORCH_FLAME_HEIGHT, fz + oz, sc);
       }

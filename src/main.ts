@@ -25,7 +25,10 @@ import {
   FLAMETHROWER_DPS,
   THIRD_PERSON_DIST,
   THIRD_PERSON_MARGIN,
-  TORCH_LIGHT_INTENSITY,
+  TORCH_LIGHT_COLOR,
+  FLARE_LIGHT_COLOR,
+  MAX_TORCH_LIGHTS,
+  TORCH_LIGHT_GATHER_DIST,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
@@ -37,7 +40,7 @@ import {
   worldToChunk,
 } from './core/constants';
 import { Tunables } from './core/tunables';
-import { Block, IS_WEAPON, BURN_SECONDS } from './core/BlockTypes';
+import { Block, IS_WEAPON, IS_TORCHLIKE, BURN_SECONDS } from './core/BlockTypes';
 import { AMMO } from './core/ammo';
 import { raycastVoxel } from './interaction/Raycast';
 import { findLandSpawn } from './core/WorldGen';
@@ -233,6 +236,10 @@ let cameraMode = 0; // 0 first-person, 1 third-person behind, 2 third-person fro
 const eyePos = new THREE.Vector3(); // the true eye (gameplay origin) after view-bob
 const eyeDir = new THREE.Vector3(); // eye look direction
 const tpAway = new THREE.Vector3(); // scratch: direction from eye to the third-person camera
+// Phase 15.8: precomputed (linear) torch/flare light colours + squared gather radius.
+const TORCH_COL = new THREE.Color(TORCH_LIGHT_COLOR);
+const FLARE_COL = new THREE.Color(FLARE_LIGHT_COLOR);
+const TORCH_GATHER_D2 = TORCH_LIGHT_GATHER_DIST * TORCH_LIGHT_GATHER_DIST;
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -482,8 +489,16 @@ input.onKeyPress = (code) => {
     return;
   }
   if (code === 'KeyR') {
-    currentAmmo = (currentAmmo + 1) % AMMO.length; // Phase 15.1: cycle rocket warhead
-    updateAmmoChip();
+    // Phase 15.8: R is context-sensitive — toggle the held torch <-> flare (underwater
+    // variant), else cycle the rocket warhead (Phase 15.1).
+    const sel = hotbar.selected();
+    if (IS_TORCHLIKE[sel]) {
+      hotbar.setSlot(hotbar.active, sel === Block.TORCH ? Block.FLARE : Block.TORCH);
+      updateTorchChip();
+    } else {
+      currentAmmo = (currentAmmo + 1) % AMMO.length;
+      updateAmmoChip();
+    }
     return;
   }
   if (code === 'KeyG') {
@@ -513,6 +528,13 @@ function updateAmmoChip(): void {
   ammoChip.textContent = `${a.name}  ×${(a.mul * Tunables.explosionPower).toFixed(1)}`;
 }
 updateAmmoChip();
+
+// Phase 15.8: torch/flare variant chip (shown only while a torch-like item is held). R toggles.
+const torchChip = document.getElementById('torchchip')!;
+function updateTorchChip(): void {
+  torchChip.textContent = hotbar.selected() === Block.FLARE ? 'Flare  (R)' : 'Torch  (R)';
+}
+updateTorchChip();
 
 // --- resize ----------------------------------------------------------------
 window.addEventListener('resize', () => {
@@ -604,12 +626,17 @@ function frame(now: number): void {
   const heldBlock = hotbar.selected();
   const moveSpeed = Math.hypot(player.vel.x, player.vel.z);
   const emberAt = (x: number, y: number, z: number) => effects.fireEmber(x, y, z);
-  viewModel.update(frameDt, now / 1000, heldBlock, cameraMode === 0, moveSpeed, emberAt);
+  // Phase 15.8: a held TORCH goes out underwater (flare stays lit); drives both the held +
+  // body flame and the dynamic light below. Quick eye-block water test (matches `submerged`).
+  const headWater =
+    world.getBlockWorld(Math.floor(eyePos.x), Math.floor(eyePos.y), Math.floor(eyePos.z)) === Block.WATER;
+  const heldLit = !(heldBlock === Block.TORCH && headWater);
+  viewModel.update(frameDt, now / 1000, heldBlock, cameraMode === 0, moveSpeed, heldLit, emberAt);
   playerModel.setVisible(cameraMode !== 0);
   const feetX = player.prevPos.x + (player.pos.x - player.prevPos.x) * alpha;
   const feetY = player.prevPos.y + (player.pos.y - player.prevPos.y) * alpha;
   const feetZ = player.prevPos.z + (player.pos.z - player.prevPos.z) * alpha;
-  playerModel.update(frameDt, now / 1000, feetX, feetY, feetZ, input.yaw, input.pitch, moveSpeed, heldBlock, fxSkyMul, emberAt);
+  playerModel.update(frameDt, now / 1000, feetX, feetY, feetZ, input.yaw, input.pitch, moveSpeed, heldBlock, heldLit, fxSkyMul, emberAt);
 
   // Phase 12d melee / Phase 15 weapon: a creature under the crosshair (closer than the
   // aimed block) takes the hit instead of mining; left-click swings on a short cooldown.
@@ -628,6 +655,7 @@ function frame(now: number): void {
   const held = hotbar.selected();
   const isFlamethrower = held === Block.FLAMETHROWER;
   ammoChip.style.display = weaponHeld && !isFlamethrower ? 'block' : 'none'; // ammo chip is rocket-only
+  torchChip.style.display = IS_TORCHLIKE[held] ? 'block' : 'none'; // Phase 15.8: torch/flare chip
   attackCooldown -= frameDt;
   const firing = input.locked && input.isMouseDown(0);
 
@@ -778,15 +806,31 @@ function frame(now: number): void {
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
 
-  // Phase 15.7 — dynamic held-torch light: illuminate terrain around the player (from the
-  // eye, so it's right in first- AND third-person) whenever a torch is held; a subtle
-  // flicker keeps it alive. Off (intensity 0 -> shader no-op) for any other item.
-  if (heldBlock === Block.TORCH) {
-    materials.shared.uTorchPos.value.copy(eyePos);
-    materials.shared.uTorchIntensity.value = TORCH_LIGHT_INTENSITY * (0.9 + 0.1 * Math.sin(now / 1000 * 11));
-  } else {
-    materials.shared.uTorchIntensity.value = 0;
+  // Phase 15.7/15.8 — dynamic torch/flare lights. Placed torches/flares use the SAME light
+  // as the held one (so they match): gather the held torch/flare (unless a TORCH is
+  // submerged -> out) plus nearby placed torch-like blocks into the shader light array.
+  // Warm for torches, red for flares. Range/brightness come from the live tuning sliders.
+  const torchPositions = materials.shared.uTorchPositions.value;
+  const torchColors = materials.shared.uTorchColors.value;
+  let torchN = 0;
+  if (IS_TORCHLIKE[heldBlock] && heldLit) {
+    torchPositions[torchN].copy(eyePos);
+    torchColors[torchN].copy(heldBlock === Block.FLARE ? FLARE_COL : TORCH_COL);
+    torchN++;
   }
+  world.forEachTorch((x, y, z, block) => {
+    if (torchN >= MAX_TORCH_LIGHTS) return;
+    const dx = x + 0.5 - eyePos.x;
+    const dy = y + 0.6 - eyePos.y;
+    const dz = z + 0.5 - eyePos.z;
+    if (dx * dx + dy * dy + dz * dz > TORCH_GATHER_D2) return;
+    torchPositions[torchN].set(x + 0.5, y + 0.6, z + 0.5);
+    torchColors[torchN].copy(block === Block.FLARE ? FLARE_COL : TORCH_COL);
+    torchN++;
+  });
+  materials.shared.uTorchCount.value = torchN;
+  materials.shared.uTorchRange.value = Tunables.torchRange;
+  materials.shared.uTorchIntensity.value = Tunables.torchIntensity * (0.9 + 0.1 * Math.sin((now / 1000) * 11));
 
   // Underwater (Phase 5/7b/8b/11.2): override the shared fog (DayNight rewrote it just
   // above, so this auto-clears on surfacing). The veil COLOUR shifts shallow->deep by

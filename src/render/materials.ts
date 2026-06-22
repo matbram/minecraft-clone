@@ -12,6 +12,8 @@ import {
   SHADOW_MAP_SIZE,
   TORCH_LIGHT_COLOR,
   TORCH_LIGHT_RANGE,
+  TORCH_LIGHT_INTENSITY,
+  MAX_TORCH_LIGHTS,
 } from '../core/constants';
 import vertexShader from './shaders/block.vert.glsl?raw';
 import fragmentShader from './shaders/block.frag.glsl?raw';
@@ -50,9 +52,11 @@ export interface Materials {
     uReflectMap: { value: THREE.Texture | null };
     uReflectMatrix: { value: THREE.Matrix4 };
     uReflectStrength: { value: number };
-    // Phase 15.7 — dynamic held-torch point light (uTorchIntensity=0 disables it).
-    uTorchPos: { value: THREE.Vector3 };
-    uTorchColor: { value: THREE.Color };
+    // Phase 15.7/15.8 — dynamic torch/flare point lights (held + nearby placed). The shader
+    // sums uTorchCount entries; uTorchCount=0 -> no contribution (loop early-out).
+    uTorchPositions: { value: THREE.Vector3[] };
+    uTorchColors: { value: THREE.Color[] };
+    uTorchCount: { value: number };
     uTorchRange: { value: number };
     uTorchIntensity: { value: number };
   };
@@ -84,10 +88,11 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uReflectMap: { value: null as THREE.Texture | null },
     uReflectMatrix: { value: new THREE.Matrix4() },
     uReflectStrength: { value: 0 },
-    uTorchPos: { value: new THREE.Vector3() },
-    uTorchColor: { value: new THREE.Color(TORCH_LIGHT_COLOR) },
+    uTorchPositions: { value: Array.from({ length: MAX_TORCH_LIGHTS }, () => new THREE.Vector3()) },
+    uTorchColors: { value: Array.from({ length: MAX_TORCH_LIGHTS }, () => new THREE.Color(TORCH_LIGHT_COLOR)) },
+    uTorchCount: { value: 0 },
     uTorchRange: { value: TORCH_LIGHT_RANGE },
-    uTorchIntensity: { value: 0 },
+    uTorchIntensity: { value: TORCH_LIGHT_INTENSITY },
   };
 
   const opaque = new THREE.ShaderMaterial({

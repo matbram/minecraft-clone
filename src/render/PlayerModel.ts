@@ -7,9 +7,10 @@
 // baked world light so it darkens in caves / at night, like the fauna and dropped items.
 
 import * as THREE from 'three';
-import { Block } from '../core/BlockTypes';
+import { Block, IS_TORCHLIKE } from '../core/BlockTypes';
 import { addBox } from '../world/Fauna';
 import { buildHeldItem, TorchFlame } from '../fx/ViewModel';
+import { flameColor, flareColor } from '../fx/FireRenderer';
 import type { World } from '../world/World';
 
 type RGB = [number, number, number];
@@ -132,8 +133,8 @@ export class PlayerModel {
     obj.position.set(0, -ARM_H + 0.04, 0.06); // in the hand
     this.armR.add(obj);
     this.item = obj;
-    if (block === Block.TORCH) {
-      this.flame = new TorchFlame(1.0, 12);
+    if (IS_TORCHLIKE[block]) {
+      this.flame = new TorchFlame(1.0, 12, block === Block.FLARE ? flareColor : flameColor);
       this.flame.group.position.set(0, -ARM_H + 0.04 + STICK_TIP, 0.06); // stick tip
       this.armR.add(this.flame.group);
     }
@@ -150,6 +151,7 @@ export class PlayerModel {
     pitch: number,
     speed: number,
     block: Block,
+    lit: boolean,
     fxSkyMul: number,
     emberAt: (x: number, y: number, z: number) => void,
   ): void {
@@ -175,11 +177,14 @@ export class PlayerModel {
     this.mat.color.setScalar(b);
 
     if (this.flame) {
-      this.flame.update(time);
-      this.flame.group.updateWorldMatrix(true, false);
-      if (Math.random() < 0.4) {
-        this.flame.group.getWorldPosition(this.handWorld);
-        emberAt(this.handWorld.x, this.handWorld.y, this.handWorld.z);
+      this.flame.group.visible = lit; // extinguished (torch underwater) -> no flame
+      if (lit) {
+        this.flame.update(time);
+        this.flame.group.updateWorldMatrix(true, false);
+        if (Math.random() < 0.4) {
+          this.flame.group.getWorldPosition(this.handWorld);
+          emberAt(this.handWorld.x, this.handWorld.y, this.handWorld.z);
+        }
       }
     }
   }

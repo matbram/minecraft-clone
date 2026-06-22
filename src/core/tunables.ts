@@ -14,6 +14,8 @@ import {
   UNDERWATER_VISIBILITY_DENSITY,
   UW_VEIL_BASE,
   WATER_SURFACE_VISIBILITY,
+  TORCH_LIGHT_RANGE,
+  TORCH_LIGHT_INTENSITY,
 } from './constants';
 
 export interface TunableValues {
@@ -26,6 +28,8 @@ export interface TunableValues {
   dayLengthMult: number; // day/night speed multiplier (1 = default)
   explosionPower: number; // Phase 15.1: rocket blast size/damage multiplier (live)
   fireDuration: number; // Phase 15.2: how long blast fires burn (life multiplier)
+  torchRange: number; // Phase 15.8: torch/flare dynamic light reach in blocks (live)
+  torchIntensity: number; // Phase 15.8: torch/flare dynamic light brightness (live)
 }
 
 export const TUNABLE_DEFAULTS: Readonly<TunableValues> = {
@@ -38,6 +42,8 @@ export const TUNABLE_DEFAULTS: Readonly<TunableValues> = {
   dayLengthMult: 1,
   explosionPower: 1,
   fireDuration: 1,
+  torchRange: TORCH_LIGHT_RANGE,
+  torchIntensity: TORCH_LIGHT_INTENSITY,
 };
 
 export const Tunables: TunableValues = { ...TUNABLE_DEFAULTS };

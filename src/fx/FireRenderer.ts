@@ -45,6 +45,21 @@ export function flameColor(out: THREE.Color, t: number): void {
   }
 }
 
+// Phase 15.8: flare flame ramp — a hot pink/white core ramping to deep red at the tip, so
+// the underwater flare reads distinctly from the warm orange torch. Same >1 hot-core trick.
+export function flareColor(out: THREE.Color, t: number): void {
+  if (t < 0.35) {
+    const u = t / 0.35;
+    out.setRGB(1.5 - 0.1 * u, 0.7 - 0.45 * u, 0.85 - 0.45 * u); // white-pink core
+  } else if (t < 0.7) {
+    const u = (t - 0.35) / 0.35;
+    out.setRGB(1.4 - 0.2 * u, 0.25 - 0.1 * u, 0.4 - 0.2 * u); // hot red-magenta
+  } else {
+    const u = Math.min(1, (t - 0.7) / 0.3);
+    out.setRGB(1.2 - 0.5 * u, 0.15 - 0.1 * u, 0.2 - 0.12 * u); // deep red tip
+  }
+}
+
 export class FireRenderer {
   private readonly mesh: THREE.InstancedMesh;
   private readonly m = new THREE.Matrix4();

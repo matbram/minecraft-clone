@@ -128,15 +128,23 @@ const noSpreadOk = stonePeak <= 1 && world.activeFireCount === 0;
 console.log(`stone fire: peak=${stonePeak} end=${world.activeFireCount} (no spread, burns out) -> ${noSpreadOk ? 'OK' : 'FAIL'}`);
 pass &&= noSpreadOk;
 
-// 6. Torch (Phase 15.5): placing one lights the area (block light propagates to neighbours).
+// 6. Torch (Phase 15.8): a placed torch is tracked in the torch registry (its light is now a
+//    dynamic GPU shader light, not baked block light), and breaking it removes it.
 const tx = bx + 8;
 const ty = h + 2;
 const tz = bz + 8;
-world.editBlock(tx + 1, ty, tz, Block.AIR); // make sure the sampled neighbour is air
 world.editBlock(tx, ty, tz, Block.TORCH);
-const litB = world.brightnessAt(tx + 1, ty, tz, 0); // skyMul 0 -> only the torch's block light
-const torchOk = litB > 0.4;
-console.log(`torch light: brightnessAt neighbour=${litB.toFixed(2)} -> ${torchOk ? 'OK' : 'FAIL'}`);
+let foundTorch = false;
+world.forEachTorch((x, y, z) => {
+  if (x === tx && y === ty && z === tz) foundTorch = true;
+});
+world.editBlock(tx, ty, tz, Block.AIR); // break it
+let stillThere = false;
+world.forEachTorch((x, y, z) => {
+  if (x === tx && y === ty && z === tz) stillThere = true;
+});
+const torchOk = foundTorch && !stillThere;
+console.log(`torch registry: placed enumerated=${foundTorch} removed-on-break=${!stillThere} -> ${torchOk ? 'OK' : 'FAIL'}`);
 pass &&= torchOk;
 
 console.log(pass ? 'FIRE: PASS' : 'FIRE: FAIL');

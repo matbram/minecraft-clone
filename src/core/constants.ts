@@ -328,6 +328,9 @@ export const TORCH_FLAME_CUBE_SIZE = 0.085; // base voxel cube edge (blocks)
 export const TORCH_LIGHT_RANGE = 10; // dynamic held-torch light reach (blocks)
 export const TORCH_LIGHT_INTENSITY = 0.9; // held-torch light strength (~LIGHT_EMISSION 14/15)
 export const TORCH_LIGHT_COLOR = 0xffb060; // warm orange held-torch light
+export const FLARE_LIGHT_COLOR = 0xff3850; // red/pink flare light (underwater-capable)
+export const MAX_TORCH_LIGHTS = 16; // shader array cap (KEEP IN SYNC with block.frag.glsl)
+export const TORCH_LIGHT_GATHER_DIST = 40; // gather placed torch/flare lights within this radius
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

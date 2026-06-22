@@ -159,7 +159,14 @@ export class FluidSim {
       return; // air staying air: schedule nothing
     }
 
-    if (here !== Block.AIR && here !== Block.WATER) return; // solid: don't replace
+    // Phase 15.8: water flowing into a TORCH cell extinguishes/destroys it (Minecraft),
+    // then fills the cell. FLARE survives water (treated as solid below), so it lights
+    // underwater. editBlock removes the torch from the registry + relights.
+    if (here === Block.TORCH) {
+      this.world.editBlock(wx, wy, wz, Block.AIR);
+    } else if (here !== Block.AIR && here !== Block.WATER) {
+      return; // solid (incl. FLARE): don't replace
+    }
 
     const changed = this.world.setFluidBlock(wx, wy, wz, Block.WATER, target);
     this.spreadIntoAir(wx, wy, wz, levelOf(target)); // fill reachable air (prefer down)

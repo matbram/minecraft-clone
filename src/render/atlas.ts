@@ -280,6 +280,21 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
 
+  // Flare (Phase 15.8): a red/striped stick (the red flame is drawn as additive particles by
+  // TorchRenderer). Visually distinct from the brown torch so you can tell the variant apart.
+  [Tile.FLARE]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    const cx = 8;
+    for (let y = 0; y < 9; y++) {
+      const band = y % 2 === 0; // candy-stripe red / off-white
+      const f = 0.85 + rnd() * 0.2;
+      ctx.fillStyle = band
+        ? `rgb(${Math.round(210 * f)},${Math.round(40 * f)},${Math.round(50 * f)})`
+        : `rgb(${Math.round(220 * f)},${Math.round(210 * f)},${Math.round(205 * f)})`;
+      ctx.fillRect(x0 + cx - 1, y0 + (TILE_PX - 1 - y), 2, 1);
+    }
+  },
+
   // Cactus: opaque green with darker vertical ribs.
   [Tile.CACTUS]: (ctx, x0, y0, rnd) => {
     for (let y = 0; y < TILE_PX; y++) {

@@ -31,9 +31,12 @@ uniform float uShadowTexel;
 uniform sampler2D uReflectMap;
 uniform float uReflectStrength;
 
-// Phase 15.7 — dynamic held-torch point light. uTorchIntensity == 0 -> no contribution.
-uniform vec3 uTorchPos;
-uniform vec3 uTorchColor;
+// Phase 15.7/15.8 — dynamic torch/flare point lights (held + nearby placed). MAX must match
+// MAX_TORCH_LIGHTS in src/core/constants.ts. uTorchCount==0 -> the loop breaks immediately.
+const int MAX_TORCH_LIGHTS = 16;
+uniform vec3 uTorchPositions[MAX_TORCH_LIGHTS];
+uniform vec3 uTorchColors[MAX_TORCH_LIGHTS];
+uniform int uTorchCount;
 uniform float uTorchRange;
 uniform float uTorchIntensity;
 
@@ -114,14 +117,17 @@ void main() {
   lit = max(lit, vec3(uAmbient));                                  // cave floor
   lit *= vLight.z;                                                 // ambient occlusion
 
-  // Phase 15.7 — dynamic held-torch point light: a warm, distance-attenuated glow added to
-  // the lit term (so it illuminates the texture like real block light, not a white wash).
-  // uTorchIntensity == 0 when not holding a torch -> the term vanishes.
-  if (uTorchIntensity > 0.0) {
-    float td = length(uTorchPos - vWorldPos);
+  // Phase 15.7/15.8 — dynamic torch/flare point lights (held + nearby placed): warm/red
+  // distance-attenuated glow added to the lit term (illuminates the texture like real block
+  // light, not a white wash). Placed torches use this same light, so they match the held one.
+  vec3 torch = vec3(0.0);
+  for (int i = 0; i < MAX_TORCH_LIGHTS; i++) {
+    if (i >= uTorchCount) break;
+    float td = length(uTorchPositions[i] - vWorldPos);
     float ta = clamp(1.0 - td / uTorchRange, 0.0, 1.0);
-    lit += uTorchColor * (ta * ta * uTorchIntensity);
+    torch += uTorchColors[i] * (ta * ta);
   }
+  lit += torch * uTorchIntensity;
 
   // Underwater caustics: rippling SUN light on sky-exposed up-faces only (so it has
   // a real source). Scaled by daylight (gone at night) and fading with depth.
