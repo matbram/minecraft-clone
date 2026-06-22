@@ -21,6 +21,7 @@ import { GenScheduler } from '../gen/GenScheduler';
 import type { GenResponse } from '../gen/workerProtocol';
 import { ChunkRenderer } from '../render/ChunkRenderer';
 import { buildChunkMesh } from '../render/ChunkMesh';
+import { buildWaterMesh } from '../render/water/WaterSurfaceMesh';
 
 export class ChunkManager {
   private readonly world: World;
@@ -253,7 +254,8 @@ export class ChunkManager {
         continue;
       }
       const builtMesh = buildChunkMesh(this.world, cx, cz);
-      this.renderer.setChunk(cx, cz, builtMesh);
+      const waterMesh = buildWaterMesh(this.world, cx, cz);
+      this.renderer.setChunk(cx, cz, builtMesh, waterMesh);
       chunk.dirty = false;
       this.meshDirty.delete(key);
       built++;

@@ -8,7 +8,7 @@
 //   attribute: (skyLight 0..1, blockLight 0..1, ao 0..1). The shader combines
 //   them as max(block, sky*day)*ao.
 
-import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT, SEA_LEVEL } from '../core/constants';
+import { CX, CZ, CY, mod, worldToChunk, AO_CURVE, SKY_DEFAULT } from '../core/constants';
 import { Tunables } from '../core/tunables';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, IS_CROSS, CROSS_TINTED, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import { BIOMES, type Biome } from '../core/biome';
@@ -17,6 +17,7 @@ import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
 import type { World } from '../world/World';
 import { ATLAS_ROWS, TILE_PX } from './atlas';
+import { waterCornerHeight } from './water/waterHeight';
 
 export interface MeshArrays {
   positions: Float32Array;
@@ -147,32 +148,6 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
   // water cell directly above (full-height column).
   const waterHeightAt = (wx: number, wy: number, wz: number): number =>
     fluidSurfaceHeight(Block.WATER, fluidAt(wx, wy, wz), blockAt(wx, wy + 1, wz) === Block.WATER);
-  // Phase 16/16.2a: smoothed surface — a top corner's height is the average of the water
-  // columns meeting at it, sampled ACROSS one Y step so a 1-block down-step (crater rim, shore,
-  // cascade) ramps into a slope instead of a hard cube step. Returns an elevation offset in
-  // [0,1] relative to cell base wy (a lower neighbour at wy-1 pulls the corner down; a taller
-  // neighbour reads 1.0 and pulls it up). cx/cz in {0,1} pick the corner of cell (wx,wz).
-  const cornerHeightAt = (wx: number, wy: number, wz: number, cx: number, cz: number): number => {
-    const sx = cx === 1 ? 1 : -1;
-    const sz = cz === 1 ? 1 : -1;
-    let sum = 0;
-    let n = 0;
-    const offs = [[0, 0], [sx, 0], [0, sz], [sx, sz]];
-    for (const [ox, oz] of offs) {
-      const nx = wx + ox;
-      const nz = wz + oz;
-      if (blockAt(nx, wy, nz) === Block.WATER) {
-        sum += waterHeightAt(nx, wy, nz); // same layer (taller column reads 1.0)
-        n++;
-      } else if (blockAt(nx, wy, nz) === Block.AIR && blockAt(nx, wy - 1, nz) === Block.WATER) {
-        sum += -1 + waterHeightAt(nx, wy - 1, nz); // one step down -> ramp toward it
-        n++;
-      }
-    }
-    if (n === 0) return 1.0;
-    return Math.max(0, Math.min(1, sum / n));
-  };
-
   const opaque = newAccum();
   const transparent = newAccum();
   const maxY = self.maxY;
@@ -256,15 +231,17 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         const h = isWater
           ? fluidSurfaceHeight(b, selfFluid, blockAt(wx, y + 1, wz) === Block.WATER)
           : 1;
-        // Phase 16: smoothed top-corner heights (index = vx*2+vz). Only computed for SURFACE
-        // water (air above) — buried interior cells render full height, so they skip this.
+        // Phase 17: smoothed + feathered top-corner heights (index = vx*2+vz) shared with the
+        // WaterSurfaceMesh sheet (waterCornerHeight) so the cube SIDE lip meets the sheet
+        // exactly at cliffs/shores/waterfalls (watertight). Only computed for SURFACE water
+        // (air above) — buried interior cells render full height and skip this.
         const exposedTop = isWater && blockAt(wx, y + 1, wz) !== Block.WATER;
         let cH0 = 1, cH1 = 1, cH2 = 1, cH3 = 1;
         if (exposedTop) {
-          cH0 = cornerHeightAt(wx, y, wz, 0, 0);
-          cH1 = cornerHeightAt(wx, y, wz, 0, 1);
-          cH2 = cornerHeightAt(wx, y, wz, 1, 0);
-          cH3 = cornerHeightAt(wx, y, wz, 1, 1);
+          cH0 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 0, 0);
+          cH1 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 0, 1);
+          cH2 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 1, 0);
+          cH3 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 1, 1);
         }
 
         for (let f = 0; f < 6; f++) {
@@ -291,10 +268,12 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           let draw: boolean;
           if (!isWater) {
             draw = shouldRenderFace(b, nbr);
-          } else if (f === 2 || f === 3) {
-            // Phase 16: water top/bottom draw ONLY against AIR (the real surface / underside).
-            // Drawing against transparent neighbours (kelp/seagrass/coral/leaves/glass) is what
-            // wrapped every submerged object in a blue "shell" — removed.
+          } else if (f === 2) {
+            // Phase 17: the water TOP is drawn by the continuous WaterSurfaceMesh sheet, not
+            // here — so there are no per-cell cube tops (the source of the "blocky" look).
+            draw = false;
+          } else if (f === 3) {
+            // Underside, seen from below (e.g. swimming under an overhang). Only vs AIR.
             topH = h;
             draw = nbr === Block.AIR;
           } else {
@@ -313,11 +292,10 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           }
           if (!draw) continue;
 
-          // Phase 16.1: flag water TOP faces for the smooth reflective-surface shader path.
-          // 1.0 = sea-level source surface -> the planar reflection map (plane at
-          // WATER_SURFACE_Y); 0.4 = any other water top -> a cheap sky-coloured reflection.
-          // Non-water + water sides stay 0 (normal block rendering).
-          const reflFlag = isWater && f === 2 ? (y === SEA_LEVEL && selfFluid === 0 ? 1 : 0.4) : 0;
+          // Phase 17: water TOP faces are gone (the WaterSurfaceMesh sheet draws + shades the
+          // surface now), so the block-shader reflective-water branch is unused -> refl = 0
+          // everywhere. (The attribute is kept for now; cleanup is deferred to Stage 17.5.)
+          const reflFlag = 0;
 
           // Biome tint: grass TOP faces + all leaf faces shift toward the biome
           // palette; every other face stays neutral (1,1,1).

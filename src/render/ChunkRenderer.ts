@@ -7,20 +7,25 @@ import { CX, CZ, LAYER_TRANSPARENT, LAYER_SHADOW_CASTER } from '../core/constant
 import { chunkKey } from '../world/chunkKey';
 import type { Materials } from './materials';
 import type { BuiltChunk, MeshArrays } from './ChunkMesh';
+import type { WaterMeshArrays } from './water/WaterSurfaceMesh';
 
 interface ChunkMeshes {
   opaque?: THREE.Mesh;
   transparent?: THREE.Mesh;
+  water?: THREE.Mesh; // Phase 17: continuous water surface (own material/geometry)
 }
 
 export class ChunkRenderer {
   private readonly scene: THREE.Scene;
   private readonly mats: Materials;
+  private readonly waterMat: THREE.Material;
   private readonly meshes = new Map<string, ChunkMeshes>();
+  private waterVisible = true; // Phase 17: gated on QualitySettings.waterSurface
 
-  constructor(scene: THREE.Scene, mats: Materials) {
+  constructor(scene: THREE.Scene, mats: Materials, waterMat: THREE.Material) {
     this.scene = scene;
     this.mats = mats;
+    this.waterMat = waterMat;
   }
 
   private buildGeometry(a: MeshArrays): THREE.BufferGeometry {
@@ -37,7 +42,7 @@ export class ChunkRenderer {
     return g;
   }
 
-  setChunk(cx: number, cz: number, built: BuiltChunk): void {
+  setChunk(cx: number, cz: number, built: BuiltChunk, water: WaterMeshArrays | null): void {
     const key = chunkKey(cx, cz);
     let entry = this.meshes.get(key);
     if (!entry) {
@@ -47,6 +52,48 @@ export class ChunkRenderer {
 
     this.applyPass(entry, 'opaque', cx, cz, built.opaque, this.mats.opaque);
     this.applyPass(entry, 'transparent', cx, cz, built.transparent, this.mats.transparent);
+    this.applyWater(entry, cx, cz, water);
+  }
+
+  // Phase 17: gate the water surface visibility on the quality preset (waterSurface).
+  setWaterEnabled(on: boolean): void {
+    if (on === this.waterVisible) return;
+    this.waterVisible = on;
+    for (const entry of this.meshes.values()) {
+      if (entry.water) entry.water.visible = on;
+    }
+  }
+
+  private buildWaterGeometry(a: WaterMeshArrays): THREE.BufferGeometry {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(a.positions, 3));
+    g.setAttribute('flow', new THREE.BufferAttribute(a.flow, 2));
+    g.setAttribute('light', new THREE.BufferAttribute(a.light, 2));
+    g.setAttribute('edge', new THREE.BufferAttribute(a.edge, 1));
+    g.setAttribute('depth', new THREE.BufferAttribute(a.depth, 1));
+    g.setIndex(new THREE.BufferAttribute(a.indices, 1));
+    g.computeBoundingSphere();
+    return g;
+  }
+
+  private applyWater(entry: ChunkMeshes, cx: number, cz: number, arrays: WaterMeshArrays | null): void {
+    const old = entry.water;
+    if (old) {
+      this.scene.remove(old);
+      old.geometry.dispose();
+      entry.water = undefined;
+    }
+    if (!arrays) return;
+    const mesh = new THREE.Mesh(this.buildWaterGeometry(arrays), this.waterMat);
+    mesh.position.set(cx * CX, 0, cz * CZ);
+    mesh.frustumCulled = true;
+    mesh.renderOrder = 1; // opaque(0) -> water(1) -> glass/leaves; depthWrite off
+    // Live ONLY on the transparent layer so the planar-reflection camera (default
+    // mask) never sees/reflects the water surface itself (no feedback).
+    mesh.layers.set(LAYER_TRANSPARENT);
+    mesh.visible = this.waterVisible;
+    this.scene.add(mesh);
+    entry.water = mesh;
   }
 
   private applyPass(
@@ -88,7 +135,7 @@ export class ChunkRenderer {
     const key = chunkKey(cx, cz);
     const entry = this.meshes.get(key);
     if (!entry) return;
-    for (const m of [entry.opaque, entry.transparent]) {
+    for (const m of [entry.opaque, entry.transparent, entry.water]) {
       if (m) {
         this.scene.remove(m);
         m.geometry.dispose();

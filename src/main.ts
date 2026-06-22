@@ -50,6 +50,7 @@ import { GenScheduler } from './gen/GenScheduler';
 import { buildAtlas } from './render/atlas';
 import { buildCrackAtlas } from './render/crackAtlas';
 import { createMaterials } from './render/materials';
+import { createWaterMaterial } from './render/water/WaterMaterial';
 import { ChunkRenderer } from './render/ChunkRenderer';
 import { ChunkManager } from './game/ChunkManager';
 import { Input } from './player/Input';
@@ -204,7 +205,9 @@ const world = new World(seed);
 world.load();
 
 const scheduler = new GenScheduler(seed);
-const chunkRenderer = new ChunkRenderer(scene, materials);
+// Phase 17: the continuous water surface is its own material (shares materials.shared).
+const waterMaterial = createWaterMaterial(materials.shared);
+const chunkRenderer = new ChunkRenderer(scene, materials, waterMaterial);
 const chunkManager = new ChunkManager(world, scheduler, chunkRenderer);
 
 // --- player + interaction --------------------------------------------------
@@ -340,6 +343,7 @@ function applyPreset(p: Preset): void {
   // Phase 4b: toggling only binds/unbinds maps + strengths -> no rebuild.
   shadowMapper.setActive(settings.shadows);
   planarReflection.setActive(settings.waterReflections);
+  chunkRenderer.setWaterEnabled(settings.waterSurface); // Phase 17: continuous water surface
   effects.setLowFx(!settings.usePost); // Phase 15: lighter explosion FX on Low
 }
 // Phase 11a: apply persisted settings. applyPreset sets the preset's default
