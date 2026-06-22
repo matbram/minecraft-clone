@@ -24,10 +24,11 @@ import {
   CAMERA_FAR,
   SPACE_START_Y,
   SPACE_FULL_Y,
+  ROCKET_COOLDOWN,
   worldToChunk,
 } from './core/constants';
 import { Tunables } from './core/tunables';
-import { Block } from './core/BlockTypes';
+import { Block, IS_WEAPON } from './core/BlockTypes';
 import { findLandSpawn } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
@@ -44,6 +45,8 @@ import { Hotbar } from './ui/Hotbar';
 import { Inventory } from './ui/Inventory';
 import { Interaction } from './interaction/Interaction';
 import { Effects } from './fx/Effects';
+import { Projectiles } from './fx/Projectiles';
+import { Explosion } from './fx/Explosion';
 import { DayNight } from './render/DayNight';
 import { Sky } from './render/Sky';
 import { SunMoon } from './render/SunMoon';
@@ -201,8 +204,9 @@ const inventory = new Inventory(document.getElementById('inventory')!, atlas.can
 const interaction = new Interaction(world, input, player, hotbar, outline, breakOverlay);
 
 // --- feel FX (Phase 2) -----------------------------------------------------
-const effects = new Effects(scene, world, input, player, atlas);
+const effects = new Effects(scene, world, input, player, atlas, document.getElementById('explosion-flash'));
 const fauna = new Fauna(scene, world); // Phase 12c: wandering biome creatures
+const projectiles = new Projectiles(scene, world, fauna); // Phase 15: rocket projectiles
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -231,6 +235,10 @@ function respawn(): void {
   deathFlash = RESPAWN_FLASH_SECONDS;
   deathOverlay.classList.add('active');
 }
+
+// Phase 15: explosion handler — carves the (permanent) crater, applies knockback +
+// damage (player health only in Survival), and drops temporary fire, then triggers FX.
+const explosion = new Explosion(world, player, survival, fauna, effects, prefs);
 
 // --- cinematic (Phase 4a) --------------------------------------------------
 let settings: QualitySettings = PRESETS[Preset.MEDIUM];
@@ -278,6 +286,7 @@ function applyPreset(p: Preset): void {
   // Phase 4b: toggling only binds/unbinds maps + strengths -> no rebuild.
   shadowMapper.setActive(settings.shadows);
   planarReflection.setActive(settings.waterReflections);
+  effects.setLowFx(!settings.usePost); // Phase 15: lighter explosion FX on Low
 }
 // Phase 11a: apply persisted settings. applyPreset sets the preset's default
 // render distance; the saved render-distance override + sensitivity + texture +
@@ -521,8 +530,10 @@ function frame(now: number): void {
   effects.update(frameDt, camera, fxSkyMul); // sets sprint FOV + applies view-bob to camera
   fauna.update(frameDt, player.pos, fxSkyMul); // wandering creatures (cosmetic)
 
-  // Phase 12d melee: a creature under the crosshair (closer than the aimed block) takes
-  // the hit instead of mining; left-click swings on a short cooldown.
+  // Phase 12d melee / Phase 15 weapon: a creature under the crosshair (closer than the
+  // aimed block) takes the hit instead of mining; left-click swings on a short cooldown.
+  // Holding a weapon (rocket launcher) suppresses mining + fires on left-click instead.
+  const weaponHeld = IS_WEAPON[hotbar.selected()] === 1;
   const creatureHit = fauna.raycast(camera.position, tmpDir, REACH);
   let meleeBlocked = false;
   if (creatureHit) {
@@ -532,13 +543,26 @@ function frame(now: number): void {
       : Infinity;
     meleeBlocked = creatureHit.dist < blockDist;
   }
-  interaction.setMeleeBlocked(meleeBlocked);
+  interaction.setMeleeBlocked(meleeBlocked || weaponHeld);
   attackCooldown -= frameDt;
-  if (meleeBlocked && creatureHit && input.locked && input.isMouseDown(0) && attackCooldown <= 0) {
-    const res = fauna.hit(creatureHit.idx, camera.position, 4);
-    if (res) (res.killed ? effects.onCreatureDie(res.pos, res.color) : effects.onCreatureHit(res.pos, res.color));
-    attackCooldown = 0.45;
+  if (input.locked && input.isMouseDown(0) && attackCooldown <= 0) {
+    if (weaponHeld) {
+      projectiles.fire(camera.position, tmpDir);
+      attackCooldown = ROCKET_COOLDOWN;
+    } else if (meleeBlocked && creatureHit) {
+      const res = fauna.hit(creatureHit.idx, camera.position, 4);
+      if (res) (res.killed ? effects.onCreatureDie(res.pos, res.color) : effects.onCreatureHit(res.pos, res.color));
+      attackCooldown = 0.45;
+    }
   }
+
+  // Phase 15: advance rockets — trail smoke along the path; detonate on impact.
+  projectiles.update(
+    frameDt,
+    (x, y, z) => effects.explosionTrail(x, y, z),
+    (pos) => explosion.detonate(pos),
+  );
+  explosion.update(frameDt); // expire temporary fire blocks
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the

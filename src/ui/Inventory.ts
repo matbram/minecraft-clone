@@ -1,7 +1,7 @@
 // DOM inventory overlay: a grid of all placeable blocks. Click one to assign it
 // to the active hotbar slot. Opening releases pointer lock (handled via onOpen).
 
-import { PLACEABLE, EDIBLE, type Block } from '../core/BlockTypes';
+import { PLACEABLE, EDIBLE, WEAPONS, type Block } from '../core/BlockTypes';
 import { drawIcon } from './itemIcon';
 import type { Hotbar } from './Hotbar';
 
@@ -32,7 +32,7 @@ export class Inventory {
 
     const grid = document.createElement('div');
     grid.className = 'inv-grid';
-    for (const block of [...PLACEABLE, ...EDIBLE]) {
+    for (const block of [...PLACEABLE, ...WEAPONS, ...EDIBLE]) {
       grid.appendChild(this.makeCell(block));
     }
     panel.appendChild(grid);

@@ -44,6 +44,11 @@ export enum Block {
   // Phase 11b: APPLE is a HELD ITEM, not a world block — never placed, meshed,
   // generated, or saved. It exists only so survival has an edible to refill hunger.
   APPLE,
+  // Phase 15: ROCKET_LAUNCHER is a HELD WEAPON item (never placed/meshed — icon is
+  // drawn procedurally). FIRE is a temporary, non-solid, light-emitting block placed
+  // by explosions; it auto-reverts to AIR after a few seconds.
+  ROCKET_LAUNCHER,
+  FIRE,
   COUNT,
 }
 
@@ -99,9 +104,10 @@ export const Tile = {
   KELP: 30,
   SEAGRASS: 31,
   CORAL: 32,
+  FIRE: 33, // Phase 15: explosion fire (cross-billboard, emissive)
 } as const;
 
-export const ATLAS_TILES = 33; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
+export const ATLAS_TILES = 34; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -149,12 +155,15 @@ export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
   IS_FOLIAGE[Block.LEAVES] = 1;
 
   // Phase 12b flora. Cross plants: non-solid, transparent (don't cull neighbors), wave.
-  for (const p of [Block.TALL_GRASS, Block.FERN, Block.FLOWER_RED, Block.FLOWER_YELLOW, Block.DEAD_BUSH, Block.SUGAR_CANE, Block.KELP, Block.SEAGRASS, Block.CORAL]) {
+  // Phase 15: FIRE renders as the same cross-billboard (flame silhouette), but emits light.
+  for (const p of [Block.TALL_GRASS, Block.FERN, Block.FLOWER_RED, Block.FLOWER_YELLOW, Block.DEAD_BUSH, Block.SUGAR_CANE, Block.KELP, Block.SEAGRASS, Block.CORAL, Block.FIRE]) {
     IS_CROSS[p] = 1;
     IS_SOLID[p] = 0;
     IS_TRANSPARENT[p] = 1;
     IS_FOLIAGE[p] = 1;
   }
+  // Fire glows (temporary light source dropped by explosions).
+  LIGHT_EMISSION[Block.FIRE] = 14;
   // Grass/fern/sugar cane recolour with the biome; flowers + dead bush keep their tile colour.
   CROSS_TINTED[Block.TALL_GRASS] = 1;
   CROSS_TINTED[Block.FERN] = 1;
@@ -164,6 +173,9 @@ export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
   // Apple is a held item, never a world block: not solid (never collided/meshed).
   IS_SOLID[Block.APPLE] = 0;
   IS_TRANSPARENT[Block.APPLE] = 1;
+  // Rocket launcher is a held weapon item: same (never placed/meshed/collided).
+  IS_SOLID[Block.ROCKET_LAUNCHER] = 0;
+  IS_TRANSPARENT[Block.ROCKET_LAUNCHER] = 1;
 })();
 
 // ---------------------------------------------------------------------------
@@ -179,6 +191,17 @@ export const FOOD_RESTORE = new Float32Array(BLOCK_COUNT);
 
 // Items the player can hold + eat. Listed in the inventory alongside PLACEABLE.
 export const EDIBLE: Block[] = [Block.APPLE];
+
+// ---------------------------------------------------------------------------
+// Phase 15: weapons. IS_WEAPON drives "left-click fires instead of mines"; the
+// item is held like APPLE (never placed). Listed in the inventory so it's equippable.
+// ---------------------------------------------------------------------------
+export const IS_WEAPON = new Uint8Array(BLOCK_COUNT);
+(function initWeapons() {
+  IS_WEAPON[Block.ROCKET_LAUNCHER] = 1;
+})();
+
+export const WEAPONS: Block[] = [Block.ROCKET_LAUNCHER];
 
 // ---------------------------------------------------------------------------
 // Per-face tile mapping: TILE_INDEX[block*6 + face] -> atlas tile slot.
@@ -229,6 +252,7 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.KELP, Tile.KELP);
   setAllFaces(Block.SEAGRASS, Tile.SEAGRASS);
   setAllFaces(Block.CORAL, Tile.CORAL);
+  setAllFaces(Block.FIRE, Tile.FIRE);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -274,6 +298,7 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.KELP] = 0;
   HARDNESS[Block.SEAGRASS] = 0;
   HARDNESS[Block.CORAL] = 0.3;
+  HARDNESS[Block.FIRE] = 0; // temporary; instantly clears if targeted
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 

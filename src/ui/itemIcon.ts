@@ -2,7 +2,7 @@
 // tile (the original behavior); edible items have no world tile, so they're drawn
 // procedurally. Keeps Hotbar + Inventory rendering identical and in one place.
 
-import { IS_EDIBLE, ATLAS_COLS, representativeTile, type Block } from '../core/BlockTypes';
+import { IS_EDIBLE, IS_WEAPON, ATLAS_COLS, representativeTile, type Block } from '../core/BlockTypes';
 import { TILE_PX } from '../render/atlas';
 
 export function drawIcon(
@@ -17,10 +17,47 @@ export function drawIcon(
     drawApple(ctx, size);
     return;
   }
+  if (IS_WEAPON[block]) {
+    drawLauncher(ctx, size);
+    return;
+  }
   const tile = representativeTile(block);
   const col = tile % ATLAS_COLS;
   const row = Math.floor(tile / ATLAS_COLS);
   ctx.drawImage(atlas, col * TILE_PX, row * TILE_PX, TILE_PX, TILE_PX, 0, 0, size, size);
+}
+
+// A shoulder-fired rocket launcher: a dark tube angled up-right, a pistol grip,
+// a small sight on top, and an orange warhead poking out the muzzle.
+function drawLauncher(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.save();
+  ctx.translate(s * 0.5, s * 0.5);
+  ctx.rotate(-0.32); // slight up-tilt
+  // Main tube.
+  ctx.fillStyle = '#3a4048';
+  ctx.fillRect(-s * 0.42, -s * 0.09, s * 0.8, s * 0.18);
+  // Rear blast cone (widens at the back).
+  ctx.fillStyle = '#23272c';
+  ctx.beginPath();
+  ctx.moveTo(-s * 0.42, -s * 0.09);
+  ctx.lineTo(-s * 0.5, -s * 0.16);
+  ctx.lineTo(-s * 0.5, s * 0.16);
+  ctx.lineTo(-s * 0.42, s * 0.09);
+  ctx.fill();
+  // Warhead at the muzzle.
+  ctx.fillStyle = '#d2502e';
+  ctx.beginPath();
+  ctx.moveTo(s * 0.38, -s * 0.09);
+  ctx.lineTo(s * 0.5, 0);
+  ctx.lineTo(s * 0.38, s * 0.09);
+  ctx.fill();
+  // Sight on top.
+  ctx.fillStyle = '#54606b';
+  ctx.fillRect(s * 0.02, -s * 0.18, s * 0.06, s * 0.09);
+  // Pistol grip below.
+  ctx.fillStyle = '#2b2f34';
+  ctx.fillRect(-s * 0.08, s * 0.09, s * 0.08, s * 0.2);
+  ctx.restore();
 }
 
 // A simple red apple (two lobes + stem + leaf + highlight), centered in `s`x`s`.

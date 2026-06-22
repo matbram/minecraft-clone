@@ -244,6 +244,37 @@ export const WATER_CEILING_CYAN = 0x6fd0e8; // bright lit cyan of the surface se
 export const WATER_CEILING_EDGE = 0x0b3a55; // ocean-blue toward grazing/edges (built-in vignette)
 
 // ---------------------------------------------------------------------------
+// Phase 15: rocket launcher + Michael-Bay explosions. 1 block = 1 m; times in
+// seconds. Numbers tuned for a "big satisfying rocket" (web-researched real
+// blast falloff translated to game feel) — see the rocket research design note.
+// ---------------------------------------------------------------------------
+export const ROCKET_SPEED = 45; // rocket flight speed (blocks/s): fast but trackable
+export const ROCKET_GRAVITY = 4; // gentle drop so the rocket arcs a little over range
+export const ROCKET_MAX_RANGE = 160; // air-burst / despawn distance (blocks)
+export const ROCKET_TRAIL_DT = 0.02; // seconds between smoke-trail puffs along the path
+export const ROCKET_COOLDOWN = 0.8; // seconds between shots
+export const ROCKET_RADIUS = 0.18; // visual rocket half-size
+
+export const SPEED_OF_SOUND = 343; // m/s -> flash→boom delay = dist_blocks / 343
+
+// Blast model (all radii in blocks). Force/overpressure fall off as ~1/r^2 (capped).
+export const EXPLOSION_CRATER_R = 4; // permanent crater radius (bowl: full ≤ inner, partial to R)
+export const EXPLOSION_CRATER_INNER = 3; // full-removal core radius
+export const EXPLOSION_DAMAGE_R = 8; // AoE damage outer edge
+export const EXPLOSION_DAMAGE_INNER = 2.5; // lethal / full-damage inner radius (self-damage zone)
+export const EXPLOSION_MAX_DAMAGE = 20; // half-hearts at the center (== MAX_HEALTH -> lethal)
+export const EXPLOSION_KNOCKBACK_R = 12; // you feel the push past the damage edge
+export const EXPLOSION_KNOCKBACK = 30; // peak impulse (blocks/s) at the center
+export const EXPLOSION_KNOCKBACK_UP = 0.4; // extra upward fraction of the impulse
+export const EXPLOSION_SHAKE_R = 25; // screen-shake (camera trauma) falloff radius
+export const EXPLOSION_FIREBALL_R = 6; // Bay-exaggerated fireball radius
+export const EXPLOSION_SHOCKWAVE_SPEED = 40; // ring expansion (blocks/s) — outruns the fireball
+export const EXPLOSION_SHOCKWAVE_R = 15; // ring fades out by here
+export const EXPLOSION_FIRE_COUNT = 6; // temporary FIRE blocks dropped in the crater
+export const FIRE_LIFETIME_MIN = 4; // seconds a placed FIRE block lasts (min)
+export const FIRE_LIFETIME_MAX = 8; // seconds a placed FIRE block lasts (max)
+
+// ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel
 // `fluid` byte per cell (only meaningful where the block id is WATER):
 //   low 3 bits = level (0 = source/full, 1..7 = thinning), bit 0x08 = falling.

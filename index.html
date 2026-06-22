@@ -124,6 +124,14 @@
       }
       #death-overlay.active { opacity: 1; }
 
+      /* Explosion flash (Phase 15) — a brief white-hot pulse on detonation */
+      #explosion-flash {
+        position: fixed; inset: 0; pointer-events: none; user-select: none; z-index: 72;
+        opacity: 0; transition: opacity 0.12s ease-out;
+        background: rgba(255, 245, 210, 0.9);
+      }
+      #explosion-flash.active { opacity: 1; }
+
       /* Live tuning panel (Phase 11.3) — side panel; world stays visible behind it */
       #tuning {
         position: fixed; top: 12px; left: 12px; z-index: 65;
@@ -173,6 +181,7 @@
     <div id="menu"></div>
     <div id="tuning"></div>
     <div id="death-overlay"></div>
+    <div id="explosion-flash"></div>
     <div id="underwater-tint"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

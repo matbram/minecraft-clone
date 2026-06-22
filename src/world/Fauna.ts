@@ -333,6 +333,32 @@ export class Fauna {
     return { killed: false, pos, color };
   }
 
+  // Phase 15: area blast — damage + radial knockback to every creature in range, with
+  // ~1/r^2 falloff. Reuses hit() (damage + flee + despawn-on-death), then adds an
+  // outward positional shove + upward pop for survivors.
+  explode(center: THREE.Vector3, radius: number, maxDmg: number, maxKnock: number): void {
+    for (let i = 0; i < this.slots.length; i++) {
+      const s = this.slots[i];
+      if (!s.active) continue;
+      const dx = s.pos.x - center.x;
+      const dy = s.pos.y - center.y;
+      const dz = s.pos.z - center.z;
+      const d = Math.hypot(dx, dy, dz);
+      if (d > radius) continue;
+      const fall = 1 - d / radius;
+      const res = this.hit(i, center, maxDmg * fall * fall);
+      if (!res || res.killed) continue; // dead -> already despawned
+      const inv = d > 1e-3 ? 1 / d : 0;
+      const shove = maxKnock * fall * fall * 0.12; // positional nudge (no per-creature vel field)
+      s.pos.x += dx * inv * shove;
+      s.pos.z += dz * inv * shove;
+      if (s.arch !== 'fish') {
+        s.vy = Math.max(s.vy, maxKnock * fall * 0.3); // pop into the air
+        s.onGround = false;
+      }
+    }
+  }
+
   update(dt: number, player: THREE.Vector3, lightMul: number): void {
     this.spawnTimer -= dt;
     if (this.spawnTimer <= 0) {

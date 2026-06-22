@@ -3,6 +3,7 @@
 // sample-file backend could replace it later without touching callers.
 
 import { Block, HARDNESS } from '../core/BlockTypes';
+import { SPEED_OF_SOUND } from '../core/constants';
 
 export interface ISfx {
   resume(): void;
@@ -15,6 +16,7 @@ export interface ISfx {
   setSubmerged(on: boolean): void;
   playSplash(): void;
   playBubble(): void;
+  playExplosion(distBlocks: number): void;
 }
 
 const MASTER_GAIN = 0.35;
@@ -30,6 +32,7 @@ const LPF_UNDERWATER = 700; // muffled below water
 const UW_AMBIENCE_GAIN = 0.05;
 const SPLASH_GAIN = 0.5;
 const BUBBLE_GAIN = 0.12;
+const BOOM_GAIN = 1.1; // explosion is the loudest cue (scaled by MASTER_GAIN like the rest)
 
 export class Sfx implements ISfx {
   private ctx: AudioContext | null = null;
@@ -334,5 +337,56 @@ export class Sfx implements ISfx {
       osc.start(t);
       osc.stop(t + 0.12);
     }
+  }
+
+  // Phase 15: explosion — a sharp HF crack, a deep low boom thump, and a filtered
+  // noise rumble tail. The whole thing is delayed by distance/speed-of-sound so a far
+  // blast flashes first and booms a moment later (only audible past ~30 blocks).
+  playExplosion(distBlocks: number): void {
+    if (!this.ctx || !this.master || !this.noise) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime + Math.max(0, distBlocks) / SPEED_OF_SOUND;
+
+    // Crack: bright high-passed noise burst (the leading edge).
+    const crack = ctx.createBufferSource();
+    crack.buffer = this.noise;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 2200;
+    const cg = ctx.createGain();
+    cg.gain.setValueAtTime(BOOM_GAIN * 0.8, t);
+    cg.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    crack.connect(hp).connect(cg).connect(this.master);
+    crack.start(t, Math.random() * 0.2);
+    crack.stop(t + 0.2);
+
+    // Boom: deep sine thump sweeping down in pitch.
+    const boom = ctx.createOscillator();
+    boom.type = 'sine';
+    boom.frequency.setValueAtTime(120, t);
+    boom.frequency.exponentialRampToValueAtTime(45, t + 0.5);
+    const bg = ctx.createGain();
+    bg.gain.setValueAtTime(0.0001, t);
+    bg.gain.exponentialRampToValueAtTime(BOOM_GAIN, t + 0.012);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    boom.connect(bg).connect(this.master);
+    boom.start(t);
+    boom.stop(t + 0.8);
+
+    // Rumble tail: low-passed, slowed noise that lingers ~1.4s.
+    const rum = ctx.createBufferSource();
+    rum.buffer = this.noise;
+    rum.loop = true;
+    rum.playbackRate.value = 0.7;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 320;
+    const rg = ctx.createGain();
+    rg.gain.setValueAtTime(0.0001, t + 0.02);
+    rg.gain.exponentialRampToValueAtTime(BOOM_GAIN * 0.5, t + 0.09);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    rum.connect(lp).connect(rg).connect(this.master);
+    rum.start(t);
+    rum.stop(t + 1.5);
   }
 }

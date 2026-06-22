@@ -245,6 +245,27 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
 
+  // Fire (Phase 15): a bright flame silhouette on a transparent background. Hot core
+  // (white/yellow) low, cooling to orange/red at the tips; bright enough to bloom.
+  [Tile.FIRE]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    const cx = 8;
+    for (let y = 0; y < TILE_PX; y++) {
+      // Flame tapers toward the top; widest near the base.
+      const up = y / (TILE_PX - 1); // 0 base .. 1 top
+      const halfW = Math.max(0, (1 - up) * 6 - rnd() * 1.5);
+      const hot = 1 - up; // hotter (whiter) low, redder high
+      for (let x = 0; x < TILE_PX; x++) {
+        if (Math.abs(x - cx) > halfW) continue;
+        const r = 255;
+        const g = Math.round(80 + hot * 160 + rnd() * 30);
+        const b = Math.round(hot * hot * 120 * rnd());
+        ctx.fillStyle = `rgb(${r},${Math.min(255, g)},${Math.min(255, b)})`;
+        ctx.fillRect(x0 + x, y0 + (TILE_PX - 1 - y), 1, 1);
+      }
+    }
+  },
+
   // Cactus: opaque green with darker vertical ribs.
   [Tile.CACTUS]: (ctx, x0, y0, rnd) => {
     for (let y = 0; y < TILE_PX; y++) {
