@@ -31,7 +31,8 @@ function hash01(n: number): number {
 // Flame colour by normalized height t (0 base .. 1 tip). Components > 1 push the bloom
 // threshold so the hot core glows. White-hot -> yellow -> orange -> deep red. Core trimmed
 // a touch (vs 15.3) so small scattered cubes read as voxels instead of a blown-out blob.
-function flameColor(out: THREE.Color, t: number): void {
+// Exported (Phase 15.6) so the held-torch / body-torch flames reuse the exact rocket ramp.
+export function flameColor(out: THREE.Color, t: number): void {
   if (t < 0.35) {
     const u = t / 0.35;
     out.setRGB(1.45 - 0.1 * u, 1.2 - 0.4 * u, 0.7 - 0.45 * u);

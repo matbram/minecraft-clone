@@ -312,6 +312,10 @@ export const FLAMETHROWER_CONE = 0.3; // ray jitter half-angle (radians) -> cone
 export const FLAMETHROWER_RAYS = 5; // ignite/damage rays cast per frame
 export const FLAMETHROWER_DPS = 16; // damage per second to creatures in the cone
 
+// Phase 15.6: first-person held item + player body + F5 camera modes.
+export const THIRD_PERSON_DIST = 3.2; // how far the third-person camera sits from the eye (blocks)
+export const THIRD_PERSON_MARGIN = 0.25; // keep-out gap when the camera pulls in against terrain
+
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel
 // `fluid` byte per cell (only meaningful where the block id is WATER):

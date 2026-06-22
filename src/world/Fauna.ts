@@ -51,8 +51,9 @@ const SPECIES: Species[] = [
 const EYE: RGB = [0.06, 0.06, 0.08];
 
 // Append a box; bakes simple per-face shading (top brightest, bottom darkest, sides mid)
-// into vertex colours so the unlit material still reads as 3D form.
-function addBox(
+// into vertex colours so the unlit material still reads as 3D form. Exported (Phase 15.6)
+// so the player body model reuses the exact merged-box build + face shading.
+export function addBox(
   P: number[], N: number[], C: number[], I: number[],
   cx: number, cy: number, cz: number, w: number, h: number, l: number, col: RGB,
 ): void {

@@ -67,6 +67,9 @@ export class Input {
 
     document.addEventListener('keydown', (e) => {
       if (e.repeat) return;
+      // While playing (pointer locked), F5 is a game key (third-person toggle), not the
+      // browser refresh — stop the reload so the camera mode cycles instead.
+      if (this.locked && e.code === 'F5') e.preventDefault();
       this.keys.add(e.code);
       this.onKeyPress(e.code);
     });

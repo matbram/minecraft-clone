@@ -23,6 +23,8 @@ import {
   FLAMETHROWER_CONE,
   FLAMETHROWER_RAYS,
   FLAMETHROWER_DPS,
+  THIRD_PERSON_DIST,
+  THIRD_PERSON_MARGIN,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
@@ -56,6 +58,8 @@ import { Effects } from './fx/Effects';
 import { Projectiles } from './fx/Projectiles';
 import { Explosion } from './fx/Explosion';
 import { FireRenderer } from './fx/FireRenderer';
+import { ViewModel } from './fx/ViewModel';
+import { PlayerModel } from './render/PlayerModel';
 import { DayNight } from './render/DayNight';
 import { Sky } from './render/Sky';
 import { SunMoon } from './render/SunMoon';
@@ -217,6 +221,15 @@ const effects = new Effects(scene, world, input, player, atlas, document.getElem
 const fauna = new Fauna(scene, world); // Phase 12c: wandering biome creatures
 const projectiles = new Projectiles(scene, world, fauna); // Phase 15: rocket projectiles
 const fireRenderer = new FireRenderer(scene); // Phase 15.3: voxel-cube flames for FireSim
+// Phase 15.6: first-person held item (child of the camera) + third-person body. The torch
+// flame on either reuses the rocket flame ramp; embers spawn via effects.fireEmber.
+const viewModel = new ViewModel(camera, atlas.texture);
+scene.add(camera); // so the camera-parented first-person view model is traversed/rendered
+const playerModel = new PlayerModel(scene, world, atlas.texture);
+let cameraMode = 0; // 0 first-person, 1 third-person behind, 2 third-person front
+const eyePos = new THREE.Vector3(); // the true eye (gameplay origin) after view-bob
+const eyeDir = new THREE.Vector3(); // eye look direction
+const tpAway = new THREE.Vector3(); // scratch: direction from eye to the third-person camera
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -433,6 +446,7 @@ inventory.onClose = () => {
 input.onWheel = (dir) => hotbar.cycle(dir);
 input.onMouseDown = (button) => {
   if (button === 2) interaction.tryUse(); // eat a held food, else place a block
+  if (input.locked && (button === 0 || button === 2)) viewModel.triggerSwing(); // Phase 15.6 swing
 };
 input.onKeyPress = (code) => {
   if (code === 'Escape') {
@@ -450,6 +464,10 @@ input.onKeyPress = (code) => {
   }
   if (code === 'KeyF') {
     player.toggleMode();
+    return;
+  }
+  if (code === 'F5') {
+    cameraMode = (cameraMode + 1) % 3; // first-person -> third behind -> third front
     return;
   }
   if (code === 'KeyM') {
@@ -574,6 +592,21 @@ function frame(now: number): void {
   const fxSkyMul = Math.max(dayNight.dayFactor, dayNight.moonFactor, dayNight.nightAmbient);
   effects.update(frameDt, camera, fxSkyMul); // sets sprint FOV + applies view-bob to camera
   fauna.update(frameDt, player.pos, fxSkyMul); // wandering creatures (cosmetic)
+
+  // Phase 15.6: the camera is now at the true EYE (view-bob applied). Capture it for the
+  // third-person offset (applied just before render) — all gameplay reads below keep using
+  // `camera` (= the eye) unchanged. Then drive the held-item / body view models.
+  eyePos.copy(camera.position);
+  eyeDir.copy(tmpDir); // clean (pre-bob) look direction
+  const heldBlock = hotbar.selected();
+  const moveSpeed = Math.hypot(player.vel.x, player.vel.z);
+  const emberAt = (x: number, y: number, z: number) => effects.fireEmber(x, y, z);
+  viewModel.update(frameDt, now / 1000, heldBlock, cameraMode === 0, moveSpeed, emberAt);
+  playerModel.setVisible(cameraMode !== 0);
+  const feetX = player.prevPos.x + (player.pos.x - player.prevPos.x) * alpha;
+  const feetY = player.prevPos.y + (player.pos.y - player.prevPos.y) * alpha;
+  const feetZ = player.prevPos.z + (player.pos.z - player.prevPos.z) * alpha;
+  playerModel.update(frameDt, now / 1000, feetX, feetY, feetZ, input.yaw, input.pitch, moveSpeed, heldBlock, fxSkyMul, emberAt);
 
   // Phase 12d melee / Phase 15 weapon: a creature under the crosshair (closer than the
   // aimed block) takes the hit instead of mining; left-click swings on a short cooldown.
@@ -794,6 +827,23 @@ function frame(now: number): void {
   underwaterParticles.update(frameDt, camera.position, submerged, world, fxSkyMul);
 
   chunkManager.update(frameDt, player.pos);
+
+  // Phase 15.6: push the render camera off the eye for third-person (F5). All gameplay /
+  // underwater logic above used the eye; everything below (shadows, reflection, god rays,
+  // render) uses the offset camera. raycastVoxel pulls it in so it never clips terrain.
+  // applyToCamera rewrites the camera next frame, so no restore is needed.
+  if (cameraMode !== 0) {
+    tpAway.copy(eyeDir).multiplyScalar(cameraMode === 1 ? -1 : 1); // behind / in front
+    let dist = THIRD_PERSON_DIST;
+    const tpHit = raycastVoxel(world, eyePos, tpAway, THIRD_PERSON_DIST);
+    if (tpHit) {
+      const hd = Math.hypot(tpHit.place.x + 0.5 - eyePos.x, tpHit.place.y + 0.5 - eyePos.y, tpHit.place.z + 0.5 - eyePos.z);
+      dist = Math.min(dist, Math.max(0.4, hd - THIRD_PERSON_MARGIN));
+    }
+    camera.position.set(eyePos.x + tpAway.x * dist, eyePos.y + tpAway.y * dist, eyePos.z + tpAway.z * dist);
+    if (cameraMode === 2) camera.lookAt(eyePos); // front view: look back at the player
+    camera.updateMatrixWorld();
+  }
 
   // Phase 4b (Cinematic): sun-depth pass first so reflected terrain is shadowed
   // too, then the planar water reflection. Both restore render target/override.
