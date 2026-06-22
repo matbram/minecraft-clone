@@ -83,10 +83,17 @@ export class TorchFlame {
   }
 }
 
-// Box geometry whose 6 faces sample a block's atlas tiles (mirrors ItemDrops.geomFor).
+// Per-face shading baked into the held cube so it reads as 3D like a world block (top
+// brightest -> bottom darkest). BoxGeometry face order: +X,-X,+Y,-Y,+Z,-Z. Mirrors the
+// Fauna.addBox ratios; multiplied (via vertexColors) by the map and the light-tint colour.
+const FACE_SHADE = [0.82, 0.82, 1.0, 0.55, 0.9, 0.9];
+
+// Box geometry whose 6 faces sample a block's atlas tiles (mirrors ItemDrops.geomFor) +
+// baked per-face shading in a vertex-colour attribute.
 function texturedCubeGeom(block: Block, size: number): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(size, size, size);
   const uv = g.attributes.uv as THREE.BufferAttribute;
+  const colors = new Float32Array(g.attributes.position.count * 3);
   for (let f = 0; f < 6; f++) {
     const tile = tileOf(block, f);
     const col = tile % ATLAS_COLS;
@@ -95,14 +102,19 @@ function texturedCubeGeom(block: Block, size: number): THREE.BufferGeometry {
     const u1 = (col + 1) / ATLAS_COLS;
     const v0 = row / ATLAS_ROWS;
     const v1 = (row + 1) / ATLAS_ROWS;
+    const sh = FACE_SHADE[f];
     for (let k = 0; k < 4; k++) {
       const vi = f * 4 + k;
       const ux = uv.getX(vi);
       const uy = uv.getY(vi);
       uv.setXY(vi, u0 + ux * (u1 - u0), v0 + (1 - uy) * (v1 - v0));
+      colors[vi * 3] = sh;
+      colors[vi * 3 + 1] = sh;
+      colors[vi * 3 + 2] = sh;
     }
   }
   uv.needsUpdate = true;
+  g.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return g;
 }
 
@@ -151,8 +163,8 @@ export function buildHeldItem(block: Block, atlas: THREE.Texture): THREE.Object3
     g.add(stem);
     return g;
   }
-  // default: a small textured block cube
-  return new THREE.Mesh(texturedCubeGeom(block, 0.32), new THREE.MeshBasicMaterial({ map: atlas }));
+  // default: a small textured block cube (vertexColors = baked per-face shading)
+  return new THREE.Mesh(texturedCubeGeom(block, 0.32), new THREE.MeshBasicMaterial({ map: atlas, vertexColors: true }));
 }
 
 export class ViewModel {
@@ -166,6 +178,9 @@ export class ViewModel {
   private bobPhase = 0;
   private swing = 0; // 0..1 use-swing impulse, decays
   private readonly tipWorld = new THREE.Vector3();
+  // Materials tinted each frame by the world light (base colour × brightness), so the held
+  // item matches the environment. Index 0 = arm (constant); the rest are the current item.
+  private readonly tints: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 
   constructor(camera: THREE.PerspectiveCamera, atlas: THREE.Texture) {
     this.atlas = atlas;
@@ -176,6 +191,8 @@ export class ViewModel {
     this.group.add(this.hand);
     this.group.position.set(0.42, -0.4, -0.7); // lower-right, just in front of the eye
     camera.add(this.group);
+    const armMat = this.arm.material as THREE.MeshBasicMaterial;
+    this.tints.push({ mat: armMat, base: armMat.color.clone() });
   }
 
   private rebuild(block: Block): void {
@@ -192,6 +209,13 @@ export class ViewModel {
     obj.position.set(0.08, 0.06, 0.02);
     this.hand.add(obj);
     this.item = obj;
+    // Re-collect the item's tintable materials (keep the arm at index 0). The flame is added
+    // below and NOT traversed here, so it stays bright (it's a light source).
+    this.tints.length = 1;
+    obj.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (m instanceof THREE.MeshBasicMaterial) this.tints.push({ mat: m, base: m.color.clone() });
+    });
     if (IS_TORCHLIKE[block]) {
       this.flame = new TorchFlame(1.1, 12, block === Block.FLARE ? flareColor : flameColor);
       this.flame.group.position.set(0.08, 0.06 + STICK_LEN / 2, 0.02); // stick tip
@@ -201,6 +225,7 @@ export class ViewModel {
 
   // visible: first-person only. speed: player horizontal speed (drives the walk bob).
   // lit: whether the held flame burns (false when a TORCH is submerged -> extinguished).
+  // light: world brightness at the player (0..1) -> the held item/arm match the environment.
   // emberAt: spawns a world-space ember (Effects.fireEmber) at the torch tip.
   update(
     dt: number,
@@ -209,11 +234,15 @@ export class ViewModel {
     visible: boolean,
     speed: number,
     lit: boolean,
+    light: number,
     emberAt: (x: number, y: number, z: number) => void,
   ): void {
     this.group.visible = visible;
     if (!visible) return;
     if (block !== this.current) this.rebuild(block);
+
+    // Tint the arm + item by the world light so the held model isn't full-bright at night.
+    for (const t of this.tints) t.mat.color.copy(t.base).multiplyScalar(light);
 
     // Walk bob + idle sway, plus a decaying use-swing.
     this.bobPhase += dt * (4 + speed * 1.6);

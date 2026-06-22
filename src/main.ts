@@ -631,12 +631,16 @@ function frame(now: number): void {
   const headWater =
     world.getBlockWorld(Math.floor(eyePos.x), Math.floor(eyePos.y), Math.floor(eyePos.z)) === Block.WATER;
   const heldLit = !(heldBlock === Block.TORCH && headWater);
-  viewModel.update(frameDt, now / 1000, heldBlock, cameraMode === 0, moveSpeed, heldLit, emberAt);
+  // Phase 15.9: light the held item/arm like the world (baked sky/block light × day-night) so
+  // it isn't full-bright at night; a lit torch/flare lights its own held item (floor 0.85).
+  let heldLight = Math.min(1, Math.max(0.1, world.brightnessAt(Math.floor(eyePos.x), Math.floor(eyePos.y), Math.floor(eyePos.z), fxSkyMul)));
+  if (IS_TORCHLIKE[heldBlock] && heldLit) heldLight = Math.max(heldLight, 0.85);
+  viewModel.update(frameDt, now / 1000, heldBlock, cameraMode === 0, moveSpeed, heldLit, heldLight, emberAt);
   playerModel.setVisible(cameraMode !== 0);
   const feetX = player.prevPos.x + (player.pos.x - player.prevPos.x) * alpha;
   const feetY = player.prevPos.y + (player.pos.y - player.prevPos.y) * alpha;
   const feetZ = player.prevPos.z + (player.pos.z - player.prevPos.z) * alpha;
-  playerModel.update(frameDt, now / 1000, feetX, feetY, feetZ, input.yaw, input.pitch, moveSpeed, heldBlock, heldLit, fxSkyMul, emberAt);
+  playerModel.update(frameDt, now / 1000, feetX, feetY, feetZ, input.yaw, input.pitch, moveSpeed, heldBlock, heldLit, heldLight, fxSkyMul, emberAt);
 
   // Phase 12d melee / Phase 15 weapon: a creature under the crosshair (closer than the
   // aimed block) takes the hit instead of mining; left-click swings on a short cooldown.

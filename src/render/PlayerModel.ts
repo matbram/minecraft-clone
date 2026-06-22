@@ -70,6 +70,8 @@ export class PlayerModel {
   private current = -1;
   private walkPhase = 0;
   private readonly handWorld = new THREE.Vector3();
+  // Held-item materials tinted by world light (base × brightness), like the body. Flame excluded.
+  private readonly heldTints: { mat: THREE.MeshBasicMaterial; base: THREE.Color }[] = [];
 
   constructor(scene: THREE.Scene, world: World, atlas: THREE.Texture) {
     this.world = world;
@@ -133,6 +135,11 @@ export class PlayerModel {
     obj.position.set(0, -ARM_H + 0.04, 0.06); // in the hand
     this.armR.add(obj);
     this.item = obj;
+    this.heldTints.length = 0;
+    obj.traverse((o) => {
+      const m = (o as THREE.Mesh).material;
+      if (m instanceof THREE.MeshBasicMaterial) this.heldTints.push({ mat: m, base: m.color.clone() });
+    });
     if (IS_TORCHLIKE[block]) {
       this.flame = new TorchFlame(1.0, 12, block === Block.FLARE ? flareColor : flameColor);
       this.flame.group.position.set(0, -ARM_H + 0.04 + STICK_TIP, 0.06); // stick tip
@@ -152,11 +159,13 @@ export class PlayerModel {
     speed: number,
     block: Block,
     lit: boolean,
+    light: number,
     fxSkyMul: number,
     emberAt: (x: number, y: number, z: number) => void,
   ): void {
     if (!this.root.visible) return;
     if (block !== this.current) this.rebuildItem(block);
+    for (const t of this.heldTints) t.mat.color.copy(t.base).multiplyScalar(light);
 
     this.root.position.set(ex, ey, ez);
     this.root.rotation.y = yaw + Math.PI; // model faces +Z -> face the look direction
