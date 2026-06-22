@@ -6,7 +6,8 @@ import { World } from '../src/world/World';
 import { Chunk } from '../src/core/Chunk';
 import { generateChunk, surfaceHeight, findLandSpawn } from '../src/core/WorldGen';
 import { Block } from '../src/core/BlockTypes';
-import { MAX_FIRES } from '../src/core/constants';
+import { MAX_FIRES, FIRE_SEED_DROP } from '../src/core/constants';
+import { fireSurfaceY } from '../src/fx/Explosion';
 
 const SEED = 1337;
 const spawn = findLandSpawn(SEED);
@@ -37,6 +38,16 @@ world.ignite(bx + 7, h, bz, 5); // (bx+7,h,bz) borders the water at bx+6 -> refu
 const douseOk = world.activeFireCount === beforeWater;
 console.log(`water douse: fires ${world.activeFireCount} (was ${beforeWater}) -> ${douseOk ? 'OK' : 'FAIL'}`);
 pass &&= douseOk;
+
+// 1b. "Always ignite" surface scan: a canopy/air detonation must still find ground BELOW
+//     center-R. Float a LOG stack; a narrow range above it misses (the old bug), but the
+//     FIRE_SEED_DROP-extended range reaches the surface.
+for (let y = h + 8; y <= h + 12; y++) world.editBlock(bx - 5, y, bz + 5, Block.LOG);
+const naiveY = fireSurfaceY(world, bx - 5, bz + 5, h + 15, h + 13); // range above the logs only
+const droppedY = fireSurfaceY(world, bx - 5, bz + 5, h + 15, h + 15 - FIRE_SEED_DROP);
+const reachOk = naiveY === -1 && droppedY === h + 13; // misses high, finds the log top once dropped
+console.log(`surface reach: naive=${naiveY} dropped=${droppedY} (expect -1, ${h + 13}) -> ${reachOk ? 'OK' : 'FAIL'}`);
+pass &&= reachOk;
 
 // 2. Build a floating LOG column above the surface, then light a fire beside it.
 const colYs = [h + 3, h + 4, h + 5, h + 6];

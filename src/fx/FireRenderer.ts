@@ -10,6 +10,7 @@ import {
   MAX_FIRE_CUBES,
   FIRE_RENDER_DISTANCE,
   FIRE_FLAME_HEIGHT,
+  FIRE_FLAME_RADIUS,
   FIRE_CUBE_SIZE,
   FIRE_CUBES_NEAR,
   FIRE_CUBES_FAR,
@@ -19,18 +20,26 @@ import type { World } from '../world/World';
 const RENDER_D2 = FIRE_RENDER_DISTANCE * FIRE_RENDER_DISTANCE;
 const TAU = Math.PI * 2;
 
+// Cheap stable hash -> [0,1). Deterministic per (cell seed + cube index) so each cube keeps
+// its scatter while still flickering via the time term added at the call site.
+function hash01(n: number): number {
+  const s = Math.sin(n * 127.1) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 // Flame colour by normalized height t (0 base .. 1 tip). Components > 1 push the bloom
-// threshold so the hot core glows. White-hot -> yellow -> orange -> deep red.
+// threshold so the hot core glows. White-hot -> yellow -> orange -> deep red. Core trimmed
+// a touch (vs 15.3) so small scattered cubes read as voxels instead of a blown-out blob.
 function flameColor(out: THREE.Color, t: number): void {
   if (t < 0.35) {
     const u = t / 0.35;
-    out.setRGB(1.6 - 0.1 * u, 1.35 - 0.45 * u, 0.8 - 0.5 * u);
+    out.setRGB(1.45 - 0.1 * u, 1.2 - 0.4 * u, 0.7 - 0.45 * u);
   } else if (t < 0.7) {
     const u = (t - 0.35) / 0.35;
-    out.setRGB(1.5 - 0.2 * u, 0.9 - 0.45 * u, 0.3 - 0.18 * u);
+    out.setRGB(1.35 - 0.15 * u, 0.8 - 0.4 * u, 0.25 - 0.15 * u);
   } else {
     const u = Math.min(1, (t - 0.7) / 0.3);
-    out.setRGB(1.3 - 0.4 * u, 0.45 - 0.33 * u, 0.12 - 0.08 * u);
+    out.setRGB(1.2 - 0.35 * u, 0.4 - 0.28 * u, 0.1 - 0.06 * u);
   }
 }
 
@@ -80,32 +89,36 @@ export class FireRenderer {
       if (strength <= 0) return;
       const s0 = (((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0) % 1000 / 1000 * TAU;
 
-      // Flame body: tapering, flickering column.
+      // Flame body: many small cubes SCATTERED through a cone that narrows with height.
       for (let k = 0; k < cubes && this.n < MAX_FIRE_CUBES; k++) {
-        const t = cubes > 1 ? k / (cubes - 1) : 0;
-        const ph = s0 + k * 1.7;
-        const flick = 0.5 + 0.5 * Math.sin(time * 8 + ph);
-        const radius = FIRE_CUBE_SIZE * 1.1 * (1 - t) * (0.5 + 0.5 * Math.sin(time * 4 + ph));
-        const ang = ph * 2 + time * 1.5;
-        const oy = t * FIRE_FLAME_HEIGHT * strength + Math.sin(time * 6 + ph) * 0.05;
-        const sc = FIRE_CUBE_SIZE * (1 - 0.45 * t) * (0.75 + 0.35 * flick) * strength;
+        const ph = s0 + k * 2.39;
+        // Height: spread up the column with a little per-cube jitter (denser near the base).
+        const t = Math.min(1, k / cubes + (hash01(ph) - 0.5) * 0.18);
+        const flick = 0.5 + 0.5 * Math.sin(time * 9 + ph);
+        // Scatter within a disc that shrinks toward the tip; sqrt for even area fill.
+        const radius = FIRE_FLAME_RADIUS * (1 - 0.65 * t) * Math.sqrt(hash01(ph + 1.3));
+        const ang = hash01(ph + 2.7) * TAU + time * 0.6;
+        const ox = Math.cos(ang) * radius + Math.sin(time * 3 + ph) * 0.05;
+        const oz = Math.sin(ang) * radius + Math.cos(time * 3 + ph) * 0.05;
+        const oy = t * FIRE_FLAME_HEIGHT * strength + Math.sin(time * 6 + ph) * 0.04;
+        const sc = FIRE_CUBE_SIZE * (1 - 0.4 * t) * (0.7 + 0.5 * flick) * strength;
         flameColor(this.col, t);
-        this.col.multiplyScalar(0.85 + 0.3 * flick);
-        this.write(fx + Math.cos(ang) * radius, y + oy, fz + Math.sin(ang) * radius, sc);
+        this.col.multiplyScalar(0.8 + 0.4 * flick);
+        this.write(fx + ox, y + oy, fz + oz, sc);
       }
 
-      // Embers rising above the flame on a looping phase.
-      const embers = 1 + Math.round(cubes * 0.25 * near);
+      // Embers: small cubes rising + fanning out above the flame on a looping phase.
+      const embers = 2 + Math.round(cubes * 0.3 * near);
       for (let e = 0; e < embers && this.n < MAX_FIRE_CUBES; e++) {
         const ph = s0 + 50 + e * 3.1;
-        const phase = (time * 0.5 + (ph % TAU) / TAU) % 1; // 0..1 rising
+        const phase = (time * 0.5 + hash01(ph)) % 1; // 0..1 rising
         const fade = 1 - phase;
-        const sc = FIRE_CUBE_SIZE * 0.5 * fade * strength;
-        if (sc < 0.02) continue;
+        const sc = FIRE_CUBE_SIZE * 0.7 * fade * strength;
+        if (sc < 0.015) continue;
         const ang = ph * 4 + time;
-        const r = 0.1 + phase * 0.45;
-        const h = FIRE_FLAME_HEIGHT * strength + phase * 1.3;
-        this.col.setRGB(0.2 + 1.3 * fade, 0.4 * fade, 0.08 * fade);
+        const r = 0.1 + phase * (FIRE_FLAME_RADIUS + 0.5);
+        const h = FIRE_FLAME_HEIGHT * strength + phase * 1.4;
+        this.col.setRGB(0.2 + 1.3 * fade, 0.38 * fade, 0.07 * fade);
         this.write(fx + Math.cos(ang) * r, y + h, fz + Math.sin(ang) * r, sc);
       }
     });

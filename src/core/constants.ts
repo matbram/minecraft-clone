@@ -270,7 +270,9 @@ export const EXPLOSION_SHAKE_R = 25; // screen-shake (camera trauma) falloff rad
 export const EXPLOSION_FIREBALL_R = 6; // Bay-exaggerated fireball radius
 export const EXPLOSION_SHOCKWAVE_SPEED = 40; // ring expansion (blocks/s) — outruns the fireball
 export const EXPLOSION_SHOCKWAVE_R = 15; // ring fades out by here
-export const EXPLOSION_FIRE_COUNT = 8; // fires seeded across the crater at detonation (× power)
+export const EXPLOSION_FIRE_COUNT = 10; // fires seeded across the crater at detonation (× power)
+export const FIRE_SEED_DROP = 24; // extra blocks to scan DOWN for a surface (canopy/air hits reach ground)
+export const FIRE_SEED_SPREAD = 2; // seed columns sampled out to crater R + this (fire rings the edge)
 export const FIRE_LIFETIME_MIN = 25; // seconds a fire cell flames (min) before smoldering out
 export const FIRE_LIFETIME_MAX = 45; // seconds a fire cell flames (max)
 // Phase 15.1: ammo + adjustable power. Every blast quantity scales by
@@ -295,12 +297,13 @@ export const FIRE_PARTICLE_CULL = 40; // only emit smoke particles within this m
 // Phase 15.3: voxel-cube flames (FireRenderer). Each flaming cell draws a flickering
 // tapering cluster of small emissive additive cubes (white-hot core -> orange/red tips +
 // embers); bloom makes the core glow. Instanced -> one draw call, LOD by distance.
-export const MAX_FIRE_CUBES = 4000; // instance pool cap (nearest fires win)
+export const MAX_FIRE_CUBES = 9000; // instance pool cap (nearest fires win)
 export const FIRE_RENDER_DISTANCE = 96; // draw flames within this many blocks of the camera
-export const FIRE_FLAME_HEIGHT = 1.7; // flame column height (blocks) at full strength
-export const FIRE_CUBE_SIZE = 0.3; // base voxel cube edge (blocks)
-export const FIRE_CUBES_NEAR = 12; // cubes per flame up close (LOD high)
-export const FIRE_CUBES_FAR = 3; // cubes per flame at FIRE_RENDER_DISTANCE (LOD low)
+export const FIRE_FLAME_HEIGHT = 1.8; // flame column height (blocks) at full strength
+export const FIRE_FLAME_RADIUS = 0.6; // horizontal flame spread at the base (blocks)
+export const FIRE_CUBE_SIZE = 0.16; // base voxel cube edge (blocks) — small, many, scattered
+export const FIRE_CUBES_NEAR = 32; // cubes per flame up close (LOD high)
+export const FIRE_CUBES_FAR = 8; // cubes per flame at FIRE_RENDER_DISTANCE (LOD low)
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

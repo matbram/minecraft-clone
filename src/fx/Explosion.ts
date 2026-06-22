@@ -26,6 +26,8 @@ import {
   EXPLOSION_FIRE_COUNT,
   FIRE_LIFETIME_MIN,
   FIRE_LIFETIME_MAX,
+  FIRE_SEED_DROP,
+  FIRE_SEED_SPREAD,
 } from '../core/constants';
 import { Tunables } from '../core/tunables';
 import type { World } from '../world/World';
@@ -36,6 +38,17 @@ import type { Effects } from './Effects';
 import type { Settings } from '../ui/Settings';
 
 type Cell = { x: number; y: number; z: number; type: Block };
+
+// Topmost solid in [bottom, top] whose cell directly above is AIR -> the y to light a fire
+// in, or -1 if the column has no open surface in range (covered by water/plant, or no solid).
+// Exported for headless testing of the "always ignite" fix.
+export function fireSurfaceY(world: World, ox: number, oz: number, top: number, bottom: number): number {
+  for (let y = top; y >= bottom; y--) {
+    if (!IS_SOLID[world.getBlockWorld(ox, y, oz)]) continue;
+    return world.getBlockWorld(ox, y + 1, oz) === Block.AIR ? y + 1 : -1;
+  }
+  return -1;
+}
 
 export class Explosion {
   constructor(
@@ -102,23 +115,37 @@ export class Explosion {
     return cells;
   }
 
-  // Light fires on solid surfaces inside the (already carved) crater. FireSim owns their
-  // lifetime, spread, and smoke from here. Fire life scales gently with power (√) and the
-  // "Fire duration" tuning knob.
+  // Light fires on solid surfaces in/under the crater. FireSim owns their lifetime, spread,
+  // and smoke from here. Reliable by design: it scans well BELOW the blast (FIRE_SEED_DROP)
+  // so canopy/air detonations still reach the ground, always seeds the centre column first,
+  // and retries columns (counting only real ignitions) until `count` fires are actually lit
+  // — so a ground-reaching blast ALWAYS catches fire. Life scales gently with power (√) and
+  // the "Fire duration" knob.
   private seedFires(center: THREE.Vector3, R: number, count: number, p: number): void {
     const lifeMul = Math.sqrt(p) * Tunables.fireDuration;
-    for (let i = 0; i < count; i++) {
-      const ox = Math.floor(center.x + (Math.random() - 0.5) * 2 * R);
-      const oz = Math.floor(center.z + (Math.random() - 0.5) * 2 * R);
-      const top = Math.min(CY - 2, Math.ceil(center.y + R));
-      const bottom = Math.max(0, Math.floor(center.y - R));
-      for (let y = top; y >= bottom; y--) {
-        if (!IS_SOLID[this.world.getBlockWorld(ox, y, oz)]) continue;
-        if (this.world.getBlockWorld(ox, y + 1, oz) !== Block.AIR) break;
-        const life = (FIRE_LIFETIME_MIN + Math.random() * (FIRE_LIFETIME_MAX - FIRE_LIFETIME_MIN)) * lifeMul;
-        this.world.ignite(ox, y + 1, oz, life);
-        break;
+    const top = Math.min(CY - 2, Math.ceil(center.y + R));
+    const bottom = Math.max(0, Math.floor(center.y - R - FIRE_SEED_DROP));
+    const spread = R + FIRE_SEED_SPREAD;
+    const maxAttempts = count * 8 + 16;
+    let placed = 0;
+    for (let a = 0; a < maxAttempts && placed < count; a++) {
+      let ox: number;
+      let oz: number;
+      if (a === 0) {
+        ox = Math.floor(center.x); // centre column first: guarantees a fire if ground exists
+        oz = Math.floor(center.z);
+      } else {
+        const ang = Math.random() * Math.PI * 2;
+        const rr = Math.sqrt(Math.random()) * spread; // even area coverage
+        ox = Math.floor(center.x + Math.cos(ang) * rr);
+        oz = Math.floor(center.z + Math.sin(ang) * rr);
       }
+      const y = fireSurfaceY(this.world, ox, oz, top, bottom);
+      if (y < 0) continue;
+      const life = (FIRE_LIFETIME_MIN + Math.random() * (FIRE_LIFETIME_MAX - FIRE_LIFETIME_MIN)) * lifeMul;
+      const before = this.world.activeFireCount;
+      this.world.ignite(ox, y, oz, life);
+      if (this.world.activeFireCount > before) placed++; // count only real ignitions (water/cap refusals retry)
     }
   }
 
