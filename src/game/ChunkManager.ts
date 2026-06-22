@@ -49,6 +49,19 @@ export class ChunkManager {
 
     this.scheduler.onChunk = (resp) => this.onChunk(resp);
     this.world.onDirty = (cx, cz) => this.meshDirty.add(chunkKey(cx, cz));
+    // Phase 15.1: bulk edits (explosion craters) ask for a full relight + remesh per chunk.
+    this.world.onRelight = (cx, cz) => this.queueRelight(cx, cz);
+  }
+
+  // Drop a chunk's baked light and queue it for relight + remesh (spread over frames by
+  // the throttled queues). Used by World.bulkEdit so a huge crater never freezes the page.
+  private queueRelight(cx: number, cz: number): void {
+    const chunk = this.world.getChunk(cx, cz);
+    if (!chunk) return;
+    chunk.clearLight();
+    chunk.dirty = true;
+    this.lightDirty.add(chunkKey(cx, cz));
+    this.meshDirty.add(chunkKey(cx, cz));
   }
 
   get loadedCount(): number {

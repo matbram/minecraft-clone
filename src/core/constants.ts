@@ -270,9 +270,16 @@ export const EXPLOSION_SHAKE_R = 25; // screen-shake (camera trauma) falloff rad
 export const EXPLOSION_FIREBALL_R = 6; // Bay-exaggerated fireball radius
 export const EXPLOSION_SHOCKWAVE_SPEED = 40; // ring expansion (blocks/s) — outruns the fireball
 export const EXPLOSION_SHOCKWAVE_R = 15; // ring fades out by here
-export const EXPLOSION_FIRE_COUNT = 6; // temporary FIRE blocks dropped in the crater
+export const EXPLOSION_FIRE_COUNT = 6; // temporary FIRE blocks dropped in the crater (× power)
 export const FIRE_LIFETIME_MIN = 4; // seconds a placed FIRE block lasts (min)
 export const FIRE_LIFETIME_MAX = 8; // seconds a placed FIRE block lasts (max)
+// Phase 15.1: ammo + adjustable power. Every blast quantity scales by
+// power = AMMO[current].mul * Tunables.explosionPower, but the crater is capped here so a
+// "Nuke" can't carve an unbounded volume (it spans ~25 chunks at the cap). Knockback is
+// also capped so you aren't launched to the void.
+export const EXPLOSION_CRATER_MAX = 32; // hard cap on carved crater radius (blocks)
+export const EXPLOSION_KNOCKBACK_MAX = 65; // cap on player knockback impulse (blocks/s)
+export const EXPLOSION_POWER_MAX = 8; // safety clamp on effective power for FX/damage scaling
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

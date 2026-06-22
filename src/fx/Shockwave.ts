@@ -10,6 +10,8 @@ const MAX = 4;
 interface Ring {
   active: boolean;
   age: number;
+  speed: number;
+  maxRadius: number;
   mesh: THREE.Mesh;
 }
 
@@ -31,15 +33,18 @@ export class Shockwave {
       mesh.visible = false;
       mesh.frustumCulled = false;
       scene.add(mesh);
-      this.slots.push({ active: false, age: 0, mesh });
+      this.slots.push({ active: false, age: 0, speed: EXPLOSION_SHOCKWAVE_SPEED, maxRadius: EXPLOSION_SHOCKWAVE_R, mesh });
     }
   }
 
-  spawn(x: number, y: number, z: number): void {
+  // maxRadius / speed default to the base constants; Effects scales them by blast power.
+  spawn(x: number, y: number, z: number, maxRadius = EXPLOSION_SHOCKWAVE_R, speed = EXPLOSION_SHOCKWAVE_SPEED): void {
     let s = this.slots.find((r) => !r.active);
     if (!s) s = this.slots[0];
     s.active = true;
     s.age = 0;
+    s.speed = speed;
+    s.maxRadius = maxRadius;
     s.mesh.position.set(x, y, z);
     s.mesh.scale.setScalar(0.1);
     s.mesh.visible = true;
@@ -50,14 +55,14 @@ export class Shockwave {
     for (const s of this.slots) {
       if (!s.active) continue;
       s.age += dt;
-      const radius = s.age * EXPLOSION_SHOCKWAVE_SPEED;
-      if (radius >= EXPLOSION_SHOCKWAVE_R) {
+      const radius = s.age * s.speed;
+      if (radius >= s.maxRadius) {
         s.active = false;
         s.mesh.visible = false;
         continue;
       }
       s.mesh.scale.setScalar(radius);
-      const frac = radius / EXPLOSION_SHOCKWAVE_R; // 0 -> 1
+      const frac = radius / s.maxRadius; // 0 -> 1
       (s.mesh.material as THREE.MeshBasicMaterial).opacity = 0.5 * (1 - frac) * (1 - frac);
     }
   }

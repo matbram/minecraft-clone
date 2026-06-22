@@ -24,6 +24,7 @@ export interface TunableValues {
   underwaterTint: number; // screen veil strength underwater
   waterSurface: number; // visibility of the surface ceiling seen from below (0 = off)
   dayLengthMult: number; // day/night speed multiplier (1 = default)
+  explosionPower: number; // Phase 15.1: rocket blast size/damage multiplier (live)
 }
 
 export const TUNABLE_DEFAULTS: Readonly<TunableValues> = {
@@ -34,6 +35,7 @@ export const TUNABLE_DEFAULTS: Readonly<TunableValues> = {
   underwaterTint: UW_VEIL_BASE,
   waterSurface: WATER_SURFACE_VISIBILITY,
   dayLengthMult: 1,
+  explosionPower: 1,
 };
 
 export const Tunables: TunableValues = { ...TUNABLE_DEFAULTS };

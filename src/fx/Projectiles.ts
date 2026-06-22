@@ -19,6 +19,7 @@ interface Rocket {
   vel: THREE.Vector3;
   dist: number; // blocks travelled (for max-range cutoff)
   trailAcc: number; // seconds since the last trail puff
+  power: number; // blast power captured at fire time (ammo × tuning)
   mesh: THREE.Mesh;
 }
 
@@ -46,13 +47,14 @@ export class Projectiles {
       mesh.visible = false;
       mesh.frustumCulled = false;
       scene.add(mesh);
-      this.slots.push({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), dist: 0, trailAcc: 0, mesh });
+      this.slots.push({ active: false, pos: new THREE.Vector3(), vel: new THREE.Vector3(), dist: 0, trailAcc: 0, power: 1, mesh });
     }
   }
 
   // Spawn a rocket from `origin` flying along `dir` (need not be normalized). The
-  // start is nudged forward so it clears the shooter.
-  fire(origin: THREE.Vector3, dir: THREE.Vector3): void {
+  // start is nudged forward so it clears the shooter. `power` is the blast strength to
+  // apply on detonation, captured now so changing ammo mid-flight doesn't retro-scale.
+  fire(origin: THREE.Vector3, dir: THREE.Vector3, power: number): void {
     let slot = this.slots.find((s) => !s.active);
     if (!slot) slot = this.slots[0]; // pool full -> recycle the oldest
     this.dir.copy(dir);
@@ -61,6 +63,7 @@ export class Projectiles {
     slot.active = true;
     slot.dist = 0;
     slot.trailAcc = 0;
+    slot.power = power;
     slot.pos.copy(origin).addScaledVector(this.dir, 0.8);
     slot.vel.copy(this.dir).multiplyScalar(ROCKET_SPEED);
     slot.mesh.position.copy(slot.pos);
@@ -69,11 +72,11 @@ export class Projectiles {
   }
 
   // onTrail spawns a smoke puff at a world point; onDetonate fires the blast at the
-  // impact point (creatureIdx >= 0 if a creature was struck, else -1).
+  // impact point with the rocket's captured power.
   update(
     dt: number,
     onTrail: (x: number, y: number, z: number) => void,
-    onDetonate: (pos: THREE.Vector3, creatureIdx: number) => void,
+    onDetonate: (pos: THREE.Vector3, power: number) => void,
   ): void {
     for (const s of this.slots) {
       if (!s.active) continue;
@@ -86,7 +89,7 @@ export class Projectiles {
       // Block hit: the destination cell is solid (segments are < 1 block at this
       // speed/step, so a per-frame cell test catches walls without tunneling).
       if (IS_SOLID[this.world.getBlockWorld(Math.floor(this.next.x), Math.floor(this.next.y), Math.floor(this.next.z))]) {
-        this.detonate(s, this.next, -1, onDetonate);
+        this.detonate(s, this.next, onDetonate);
         continue;
       }
 
@@ -94,7 +97,7 @@ export class Projectiles {
       const hit = this.fauna.raycast(s.pos, this.dir, segLen);
       if (hit) {
         this.next.copy(s.pos).addScaledVector(this.dir, hit.dist);
-        this.detonate(s, this.next, hit.idx, onDetonate);
+        this.detonate(s, this.next, onDetonate);
         continue;
       }
 
@@ -116,7 +119,7 @@ export class Projectiles {
         continue;
       }
       if (s.dist >= ROCKET_MAX_RANGE) {
-        this.detonate(s, s.pos, -1, onDetonate);
+        this.detonate(s, s.pos, onDetonate);
         continue;
       }
 
@@ -125,14 +128,9 @@ export class Projectiles {
     }
   }
 
-  private detonate(
-    s: Rocket,
-    at: THREE.Vector3,
-    creatureIdx: number,
-    onDetonate: (pos: THREE.Vector3, creatureIdx: number) => void,
-  ): void {
+  private detonate(s: Rocket, at: THREE.Vector3, onDetonate: (pos: THREE.Vector3, power: number) => void): void {
     s.active = false;
     s.mesh.visible = false;
-    onDetonate(at, creatureIdx);
+    onDetonate(at, s.power);
   }
 }

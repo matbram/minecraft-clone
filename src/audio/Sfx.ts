@@ -16,7 +16,7 @@ export interface ISfx {
   setSubmerged(on: boolean): void;
   playSplash(): void;
   playBubble(): void;
-  playExplosion(distBlocks: number): void;
+  playExplosion(distBlocks: number, power?: number): void;
 }
 
 const MASTER_GAIN = 0.35;
@@ -339,13 +339,16 @@ export class Sfx implements ISfx {
     }
   }
 
-  // Phase 15: explosion — a sharp HF crack, a deep low boom thump, and a filtered
-  // noise rumble tail. The whole thing is delayed by distance/speed-of-sound so a far
-  // blast flashes first and booms a moment later (only audible past ~30 blocks).
-  playExplosion(distBlocks: number): void {
+  // Phase 15/15.1: explosion — a sharp HF crack, a deep low boom thump, and a filtered
+  // noise rumble tail. Delayed by distance/speed-of-sound so a far blast flashes first and
+  // booms a moment later. `power` (≈1..8) deepens the boom + lengthens the rumble for
+  // bigger warheads.
+  playExplosion(distBlocks: number, power = 1): void {
     if (!this.ctx || !this.master || !this.noise) return;
     const ctx = this.ctx;
+    const p = Math.max(0.5, Math.min(8, power));
     const t = ctx.currentTime + Math.max(0, distBlocks) / SPEED_OF_SOUND;
+    const tail = 1.4 + p * 0.25; // rumble length grows with size
 
     // Crack: bright high-passed noise burst (the leading edge).
     const crack = ctx.createBufferSource();
@@ -360,20 +363,20 @@ export class Sfx implements ISfx {
     crack.start(t, Math.random() * 0.2);
     crack.stop(t + 0.2);
 
-    // Boom: deep sine thump sweeping down in pitch.
+    // Boom: deep sine thump sweeping down in pitch (deeper for bigger blasts).
     const boom = ctx.createOscillator();
     boom.type = 'sine';
-    boom.frequency.setValueAtTime(120, t);
-    boom.frequency.exponentialRampToValueAtTime(45, t + 0.5);
+    boom.frequency.setValueAtTime(120 / Math.sqrt(p), t);
+    boom.frequency.exponentialRampToValueAtTime(35 / Math.sqrt(p), t + 0.5);
     const bg = ctx.createGain();
     bg.gain.setValueAtTime(0.0001, t);
-    bg.gain.exponentialRampToValueAtTime(BOOM_GAIN, t + 0.012);
-    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    bg.gain.exponentialRampToValueAtTime(BOOM_GAIN * Math.min(1.5, 0.9 + p * 0.1), t + 0.012);
+    bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.5 + p * 0.1);
     boom.connect(bg).connect(this.master);
     boom.start(t);
-    boom.stop(t + 0.8);
+    boom.stop(t + 0.6 + p * 0.1);
 
-    // Rumble tail: low-passed, slowed noise that lingers ~1.4s.
+    // Rumble tail: low-passed, slowed noise that lingers.
     const rum = ctx.createBufferSource();
     rum.buffer = this.noise;
     rum.loop = true;
@@ -384,9 +387,9 @@ export class Sfx implements ISfx {
     const rg = ctx.createGain();
     rg.gain.setValueAtTime(0.0001, t + 0.02);
     rg.gain.exponentialRampToValueAtTime(BOOM_GAIN * 0.5, t + 0.09);
-    rg.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
+    rg.gain.exponentialRampToValueAtTime(0.0001, t + tail);
     rum.connect(lp).connect(rg).connect(this.master);
     rum.start(t);
-    rum.stop(t + 1.5);
+    rum.stop(t + tail + 0.1);
   }
 }

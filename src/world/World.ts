@@ -8,7 +8,7 @@ import { CX, CZ, CY, COLS, idx, mod, worldToChunk } from '../core/constants';
 import { Block } from '../core/BlockTypes';
 import { Chunk } from '../core/Chunk';
 import { templateFor, type FeatureDecision } from '../core/features';
-import { chunkKey } from './chunkKey';
+import { chunkKey, parseKey } from './chunkKey';
 import { LightEngine } from './LightEngine';
 import { FluidSim } from './FluidSim';
 
@@ -29,6 +29,9 @@ export class World {
 
   // Set by ChunkManager: notified whenever a (loaded) chunk needs re-meshing.
   onDirty: (cx: number, cz: number) => void = () => {};
+  // Phase 15.1: set by ChunkManager — a bulk edit (e.g. an explosion crater) asks for a
+  // full RELIGHT + remesh of a chunk (clear + recompute), vs onDirty which only remeshes.
+  onRelight: (cx: number, cz: number) => void = () => {};
 
   private readonly lightEngine = new LightEngine(this);
   private readonly fluidSim = new FluidSim(this);
@@ -173,6 +176,54 @@ export class World {
   // Incremental light update on a block edit (remove + add for sky and block).
   queueLightUpdate(wx: number, wy: number, wz: number, oldB: Block, newB: Block): void {
     this.lightEngine.onBlockChange(wx, wy, wz, oldB, newB);
+  }
+
+  // Phase 15.1: write many cells at once (e.g. an explosion crater) WITHOUT a per-block
+  // light BFS. Block data + heightMap + persisted edits stay correct; each affected chunk
+  // is RELIT + remeshed ONCE via onRelight (ChunkManager spreads it over frames) instead
+  // of thousands of synchronous BFS calls that would freeze the page. Carving only removes
+  // blocks (adds light), so a one-shot relight is correct. `persist=false` for transient
+  // blocks (fire) that should regenerate clean on reload.
+  bulkEdit(cells: { x: number; y: number; z: number; type: Block }[], persist = true): void {
+    if (cells.length === 0) return;
+    const affected = new Set<string>();
+    for (const c of cells) {
+      if (c.y < 0 || c.y >= CY) continue;
+      const cx = worldToChunk(c.x);
+      const cz = worldToChunk(c.z);
+      const chunk = this.getChunk(cx, cz);
+      if (!chunk) continue;
+      const lx = mod(c.x, CX);
+      const lz = mod(c.z, CZ);
+      chunk.setBlock(lx, c.y, lz, c.type);
+      const key = chunkKey(cx, cz);
+      if (persist) {
+        let m = this.edits.get(key);
+        if (!m) {
+          m = new Map();
+          this.edits.set(key, m);
+        }
+        m.set(idx(lx, c.y, lz), c.type);
+      }
+      affected.add(key);
+      // Let water flow into a carved cell bordering water (oceans/lakes into the crater).
+      if (c.type === Block.AIR && this.bordersWater(c.x, c.y, c.z)) this.fluidSim.enqueueAround(c.x, c.y, c.z);
+    }
+    for (const key of affected) {
+      const [cx, cz] = parseKey(key);
+      this.onRelight(cx, cz);
+    }
+  }
+
+  private bordersWater(wx: number, wy: number, wz: number): boolean {
+    return (
+      this.getBlockWorld(wx + 1, wy, wz) === Block.WATER ||
+      this.getBlockWorld(wx - 1, wy, wz) === Block.WATER ||
+      this.getBlockWorld(wx, wy + 1, wz) === Block.WATER ||
+      this.getBlockWorld(wx, wy - 1, wz) === Block.WATER ||
+      this.getBlockWorld(wx, wy, wz + 1) === Block.WATER ||
+      this.getBlockWorld(wx, wy, wz - 1) === Block.WATER
+    );
   }
 
   // --- finalize helpers (run when a freshly generated chunk arrives) -------

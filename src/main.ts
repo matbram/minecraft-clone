@@ -29,6 +29,7 @@ import {
 } from './core/constants';
 import { Tunables } from './core/tunables';
 import { Block, IS_WEAPON } from './core/BlockTypes';
+import { AMMO } from './core/ammo';
 import { findLandSpawn } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
@@ -262,6 +263,7 @@ const waterCeiling = new WaterCeiling(scene); // Phase 11.5b: visible surface fr
 let wasSubmerged = false; // edge-detect surface crossings for the splash
 let splashCooldown = 0; // rate-limits splash so bobbing at the surface doesn't spam
 let attackCooldown = 0; // Phase 12d: melee swing rate-limit
+let currentAmmo = 0; // Phase 15.1: selected rocket warhead (index into AMMO)
 let bubbleSfxTimer = 0; // throttles occasional bubble blips while submerged
 const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
@@ -368,6 +370,7 @@ const tuning = new TuningPanel(document.getElementById('tuning')!, {
   onChange: () => {
     prefs.data.tuning = { ...Tunables };
     prefs.save();
+    updateAmmoChip(); // "Explosion power" slider changes the effective ammo power shown
   },
   onRelight: () => chunkManager.rebuildLighting(),
   onRemesh: () => chunkManager.remeshAll(),
@@ -430,6 +433,11 @@ input.onKeyPress = (code) => {
     cycleTexture();
     return;
   }
+  if (code === 'KeyR') {
+    currentAmmo = (currentAmmo + 1) % AMMO.length; // Phase 15.1: cycle rocket warhead
+    updateAmmoChip();
+    return;
+  }
   if (code === 'KeyG') {
     changePreset(PRESETS[nextPreset(settings.preset)].name);
     return;
@@ -448,6 +456,15 @@ input.onKeyPress = (code) => {
 updateMenuVisibility();
 
 const hud = document.getElementById('hud')!;
+
+// Phase 15.1: ammo indicator chip (shown only while the launcher is held). Reflects the
+// selected warhead + the effective power (ammo mul × the live "Explosion power" tuning).
+const ammoChip = document.getElementById('ammo')!;
+function updateAmmoChip(): void {
+  const a = AMMO[currentAmmo];
+  ammoChip.textContent = `${a.name}  ×${(a.mul * Tunables.explosionPower).toFixed(1)}`;
+}
+updateAmmoChip();
 
 // --- resize ----------------------------------------------------------------
 window.addEventListener('resize', () => {
@@ -544,10 +561,12 @@ function frame(now: number): void {
     meleeBlocked = creatureHit.dist < blockDist;
   }
   interaction.setMeleeBlocked(meleeBlocked || weaponHeld);
+  ammoChip.style.display = weaponHeld ? 'block' : 'none'; // Phase 15.1: show ammo while armed
   attackCooldown -= frameDt;
   if (input.locked && input.isMouseDown(0) && attackCooldown <= 0) {
     if (weaponHeld) {
-      projectiles.fire(camera.position, tmpDir);
+      const power = AMMO[currentAmmo].mul * Tunables.explosionPower; // captured at fire time
+      projectiles.fire(camera.position, tmpDir, power);
       attackCooldown = ROCKET_COOLDOWN;
     } else if (meleeBlocked && creatureHit) {
       const res = fauna.hit(creatureHit.idx, camera.position, 4);
@@ -556,11 +575,12 @@ function frame(now: number): void {
     }
   }
 
-  // Phase 15: advance rockets — trail smoke along the path; detonate on impact.
+  // Phase 15: advance rockets — trail smoke along the path; detonate (with the rocket's
+  // captured power) on impact.
   projectiles.update(
     frameDt,
     (x, y, z) => effects.explosionTrail(x, y, z),
-    (pos) => explosion.detonate(pos),
+    (pos, power) => explosion.detonate(pos, power),
   );
   explosion.update(frameDt); // expire temporary fire blocks
 
@@ -758,7 +778,8 @@ function frame(now: number): void {
       `pos ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}\n` +
       `chunk ${worldToChunk(p.x)}, ${worldToChunk(p.z)}  ${player.mode === PlayerMode.FLY ? 'FLY' : 'WALK'}${player.onGround ? ' grounded' : ''}${player.inWater ? ' swimming' : ''}\n` +
       `loaded ${chunkManager.loadedCount}  lightQ ${chunkManager.lightQueueLength}  meshQ ${chunkManager.meshQueueLength}\n` +
-      `seed ${seed}  ${settings.name}  ${textures.active.id}  day ${dayNight.phase.toFixed(2)}${dayNight.paused ? ' (paused)' : ''}`;
+      `seed ${seed}  ${settings.name}  ${textures.active.id}  day ${dayNight.phase.toFixed(2)}${dayNight.paused ? ' (paused)' : ''}\n` +
+      `ammo ${AMMO[currentAmmo].name} ×${(AMMO[currentAmmo].mul * Tunables.explosionPower).toFixed(1)} (R to cycle)`;
   }
 
   requestAnimationFrame(frame);

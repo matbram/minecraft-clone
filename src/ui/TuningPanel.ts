@@ -21,7 +21,7 @@ type Heavy = 'relight' | 'remesh' | undefined;
 interface Knob {
   label: string;
   desc: string;
-  group: 'Lighting' | 'Water';
+  group: 'Lighting' | 'Water' | 'Combat';
   min: number;
   max: number;
   step: number;
@@ -136,6 +136,18 @@ function makeKnobs(time: { phase: number }): Knob[] {
       get: () => Math.round(Tunables.waterSurface * 100),
       set: (s) => (Tunables.waterSurface = s / 100),
       fmt: (s) => `${s}%`,
+    },
+    {
+      label: 'Explosion power',
+      desc: 'Rocket blast size & damage, on top of the ammo type. Right = bigger.',
+      group: 'Combat',
+      min: 25,
+      max: 300,
+      step: 25,
+      heavy: undefined,
+      get: () => Math.round(Tunables.explosionPower * 100),
+      set: (s) => (Tunables.explosionPower = s / 100),
+      fmt: (s) => `${(s / 100).toFixed(2)}×`,
     },
   ];
 }
