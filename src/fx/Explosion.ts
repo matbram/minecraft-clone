@@ -27,6 +27,7 @@ import {
   FIRE_LIFETIME_MIN,
   FIRE_LIFETIME_MAX,
 } from '../core/constants';
+import { Tunables } from '../core/tunables';
 import type { World } from '../world/World';
 import type { Player } from '../player/Player';
 import type { Survival } from '../player/Survival';
@@ -34,19 +35,9 @@ import type { Fauna } from '../world/Fauna';
 import type { Effects } from './Effects';
 import type { Settings } from '../ui/Settings';
 
-interface FireCell {
-  x: number;
-  y: number;
-  z: number;
-  expire: number; // value of `clock` after which it reverts to AIR
-}
-
 type Cell = { x: number; y: number; z: number; type: Block };
 
 export class Explosion {
-  private readonly fires: FireCell[] = [];
-  private clock = 0;
-
   constructor(
     private readonly world: World,
     private readonly player: Player,
@@ -63,10 +54,9 @@ export class Explosion {
 
     // Crater (bulk, permanent) — instant carve, relight/remesh spread over frames.
     this.world.bulkEdit(this.buildCraterCells(center, craterR, inner), true);
-    // Temporary fire scattered on the new crater surfaces (not persisted -> regenerates
-    // clean on reload; reverted on a timer here).
-    const fireCells = this.buildFireCells(center, craterR, Math.min(40, Math.round(EXPLOSION_FIRE_COUNT * p)));
-    if (fireCells.length) this.world.bulkEdit(fireCells, false);
+    // Seed living fires across the new crater surfaces; FireSim then keeps them burning,
+    // spreading to + consuming nearby fuel, and smoking long after (Phase 15.2).
+    this.seedFires(center, craterR, Math.round(EXPLOSION_FIRE_COUNT * p), p);
 
     // Force + damage. Knockback always; player health only in Survival.
     const knock = Math.min(EXPLOSION_KNOCKBACK_MAX, EXPLOSION_KNOCKBACK * Math.sqrt(p));
@@ -77,20 +67,6 @@ export class Explosion {
     const dy = this.player.pos.y + EYE_HEIGHT - center.y;
     const dz = this.player.pos.z - center.z;
     this.effects.onExplosion(center, Math.hypot(dx, dy, dz), power);
-  }
-
-  // Expire temporary fire blocks (revert to AIR once their lifetime is up).
-  update(dt: number): void {
-    if (this.fires.length === 0) return;
-    this.clock += dt;
-    for (let i = this.fires.length - 1; i >= 0; i--) {
-      const f = this.fires[i];
-      if (this.clock < f.expire) continue;
-      if (this.world.getBlockWorld(f.x, f.y, f.z) === Block.FIRE) {
-        this.world.editBlock(f.x, f.y, f.z, Block.AIR);
-      }
-      this.fires.splice(i, 1);
-    }
   }
 
   // Bowl-shaped sphere of AIR cells (full within `inner`, thinning to `R`). Built in
@@ -126,9 +102,11 @@ export class Explosion {
     return cells;
   }
 
-  // A few FIRE cells sitting on solid surfaces inside the (already carved) crater.
-  private buildFireCells(center: THREE.Vector3, R: number, count: number): Cell[] {
-    const out: Cell[] = [];
+  // Light fires on solid surfaces inside the (already carved) crater. FireSim owns their
+  // lifetime, spread, and smoke from here. Fire life scales gently with power (√) and the
+  // "Fire duration" tuning knob.
+  private seedFires(center: THREE.Vector3, R: number, count: number, p: number): void {
+    const lifeMul = Math.sqrt(p) * Tunables.fireDuration;
     for (let i = 0; i < count; i++) {
       const ox = Math.floor(center.x + (Math.random() - 0.5) * 2 * R);
       const oz = Math.floor(center.z + (Math.random() - 0.5) * 2 * R);
@@ -137,17 +115,11 @@ export class Explosion {
       for (let y = top; y >= bottom; y--) {
         if (!IS_SOLID[this.world.getBlockWorld(ox, y, oz)]) continue;
         if (this.world.getBlockWorld(ox, y + 1, oz) !== Block.AIR) break;
-        out.push({ x: ox, y: y + 1, z: oz, type: Block.FIRE });
-        this.fires.push({
-          x: ox,
-          y: y + 1,
-          z: oz,
-          expire: this.clock + FIRE_LIFETIME_MIN + Math.random() * (FIRE_LIFETIME_MAX - FIRE_LIFETIME_MIN),
-        });
+        const life = (FIRE_LIFETIME_MIN + Math.random() * (FIRE_LIFETIME_MAX - FIRE_LIFETIME_MIN)) * lifeMul;
+        this.world.ignite(ox, y + 1, oz, life);
         break;
       }
     }
-    return out;
   }
 
   // Radial impulse + damage to the player. Knockback always; health only in Survival.

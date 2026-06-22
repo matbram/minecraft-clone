@@ -17,6 +17,8 @@ import {
   UNDERWATER_COLOR_DEPTH,
   UNDERWATER_PARTICLES,
   MAX_FLUID_OPS_PER_TICK,
+  MAX_FIRE_OPS_PER_TICK,
+  FIRE_PARTICLE_CULL,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
@@ -238,8 +240,23 @@ function respawn(): void {
 }
 
 // Phase 15: explosion handler — carves the (permanent) crater, applies knockback +
-// damage (player health only in Survival), and drops temporary fire, then triggers FX.
+// damage (player health only in Survival), and seeds living fire, then triggers FX.
 const explosion = new Explosion(world, player, survival, fauna, effects, prefs);
+
+// Phase 15.2: FireSim asks for a particle at each burning cell as it ticks; emit a flame
+// ember (+ occasional smoke) while flaming, smoke only while smoldering — distance-culled.
+world.onFireSample = (x, y, z, flaming) => {
+  const dx = x - player.pos.x;
+  const dy = y - (player.pos.y + EYE_HEIGHT);
+  const dz = z - player.pos.z;
+  if (dx * dx + dy * dy + dz * dz > FIRE_PARTICLE_CULL * FIRE_PARTICLE_CULL) return;
+  if (flaming) {
+    effects.fireEmber(x, y, z);
+    if (Math.random() < 0.5) effects.fireSmoke(x, y, z);
+  } else {
+    effects.fireSmoke(x, y, z);
+  }
+};
 
 // --- cinematic (Phase 4a) --------------------------------------------------
 let settings: QualitySettings = PRESETS[Preset.MEDIUM];
@@ -512,6 +529,7 @@ function frame(now: number): void {
       player.tick(FIXED_DT);
       interaction.tick(FIXED_DT);
       world.tickFluids(MAX_FLUID_OPS_PER_TICK);
+      world.tickFires(MAX_FIRE_OPS_PER_TICK); // Phase 15.2: spread/consume/smolder + smoke
       // Survival (Phase 11b): only when enabled + locked (paused/menu never drains).
       // Reads landingImpact set by player.tick this same step.
       if (prefs.data.survival && input.locked) {
@@ -576,13 +594,12 @@ function frame(now: number): void {
   }
 
   // Phase 15: advance rockets — trail smoke along the path; detonate (with the rocket's
-  // captured power) on impact.
+  // captured power) on impact. (Fire afterglow is owned by FireSim via world.tickFires.)
   projectiles.update(
     frameDt,
     (x, y, z) => effects.explosionTrail(x, y, z),
     (pos, power) => explosion.detonate(pos, power),
   );
-  explosion.update(frameDt); // expire temporary fire blocks
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the

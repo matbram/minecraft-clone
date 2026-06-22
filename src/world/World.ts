@@ -11,6 +11,7 @@ import { templateFor, type FeatureDecision } from '../core/features';
 import { chunkKey, parseKey } from './chunkKey';
 import { LightEngine } from './LightEngine';
 import { FluidSim } from './FluidSim';
+import { FireSim } from './FireSim';
 
 interface PendingBlock {
   lx: number;
@@ -35,6 +36,11 @@ export class World {
 
   private readonly lightEngine = new LightEngine(this);
   private readonly fluidSim = new FluidSim(this);
+  private readonly fireSim = new FireSim(this);
+
+  // Phase 15.2: set by main — FireSim asks for a flame/smoke particle at a burning cell
+  // (`flaming` = active flame vs smoldering). main distance-culls + routes to Effects.
+  onFireSample: (x: number, y: number, z: number, flaming: boolean) => void = () => {};
 
   constructor(seed: number) {
     this.seed = seed;
@@ -126,6 +132,20 @@ export class World {
     this.fluidSim.tick(maxOps);
   }
 
+  // Phase 15.2: advance the fire sim (spread/consume/smolder + particle emission).
+  tickFires(maxOps: number): void {
+    this.fireSim.tick(maxOps);
+  }
+
+  // Light a fire in an AIR cell that flames for `life` seconds, then smolders + goes out.
+  ignite(wx: number, wy: number, wz: number, life: number): void {
+    this.fireSim.ignite(wx, wy, wz, life);
+  }
+
+  get activeFireCount(): number {
+    return this.fireSim.count;
+  }
+
   // After a chunk's persisted edits are replayed, re-derive its fluid state: water
   // cells recompute their true level (flowing reloads as a source-level 0 until
   // re-simulated) or drain, and dug-out AIR cells let neighboring water flow back
@@ -146,7 +166,10 @@ export class World {
 
   // --- player edits (Phase 1 interaction goes through here) ----------------
 
-  editBlock(wx: number, wy: number, wz: number, type: Block): void {
+  // `persist=false` writes the block (with lighting/remesh/fluid) but does NOT record it in
+  // the saved edits — used for transient blocks like FIRE that should regenerate clean on
+  // reload (Phase 15.2). Permanent edits (mining, placing, consuming fuel) use the default.
+  editBlock(wx: number, wy: number, wz: number, type: Block, persist = true): void {
     if (wy < 0 || wy >= CY) return;
     const cx = worldToChunk(wx);
     const cz = worldToChunk(wz);
@@ -159,13 +182,15 @@ export class World {
     chunk.setBlock(lx, wy, lz, type);
     if (type === Block.WATER) chunk.setFluid(lx, wy, lz, 0); // player-placed water is a source
 
-    const key = chunkKey(cx, cz);
-    let m = this.edits.get(key);
-    if (!m) {
-      m = new Map();
-      this.edits.set(key, m);
+    if (persist) {
+      const key = chunkKey(cx, cz);
+      let m = this.edits.get(key);
+      if (!m) {
+        m = new Map();
+        this.edits.set(key, m);
+      }
+      m.set(idx(lx, wy, lz), type);
     }
-    m.set(idx(lx, wy, lz), type);
 
     this.queueLightUpdate(wx, wy, wz, oldB, type);
     this.markDirtyAround(cx, cz, lx, lz);

@@ -207,6 +207,24 @@ export class Effects {
     this.sfx.playExplosion(distToPlayer, p);
   }
 
+  // Phase 15.2: ongoing emission from a burning cell (FireSim drives these, distance-culled
+  // by main). A small rising flame ember (emissive/additive, glows in the dark like real
+  // fire) and a rising, growing, light-tinted smoke puff.
+  fireEmber(x: number, y: number, z: number): void {
+    this.fire.burst(x, y, z, FIRE_PALETTE, { count: 1, speed: 0.8, life: 0.6, size: 0.55, endScale: 0.25, gravity: -1.5, up: 0.8, spread: 0.25 });
+  }
+  fireSmoke(x: number, y: number, z: number): void {
+    const b = Math.max(0.2, this.world.brightnessAt(Math.floor(x), Math.floor(y), Math.floor(z), this.lightMul));
+    this.smoke.burst(
+      x,
+      y,
+      z,
+      SMOKE_PALETTE,
+      { count: 1, speed: 0.5, life: 3.2, lifeVar: 0.4, size: 0.7, endScale: 3.0, alpha: 0.7, gravity: -0.5, up: 1.2, spread: 0.4 },
+      b,
+    );
+  }
+
   // Phase 11.5 underwater: muffle + ambience swap (safe to call every frame — Sfx
   // dedupes), a splash (sound + droplet burst) on crossing the surface, and bubbles.
   setSubmerged(on: boolean): void {

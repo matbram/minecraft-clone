@@ -204,6 +204,27 @@ export const IS_WEAPON = new Uint8Array(BLOCK_COUNT);
 export const WEAPONS: Block[] = [Block.ROCKET_LAUNCHER];
 
 // ---------------------------------------------------------------------------
+// Phase 15.2: flammable blocks — fire (FireSim) spreads to and consumes these.
+// Vegetation + wood; stone/dirt/sand/etc. don't burn. (FIRE itself is excluded.)
+// ---------------------------------------------------------------------------
+export const IS_FLAMMABLE = new Uint8Array(BLOCK_COUNT);
+(function initFlammable() {
+  for (const b of [
+    Block.LOG,
+    Block.LEAVES,
+    Block.TALL_GRASS,
+    Block.FERN,
+    Block.FLOWER_RED,
+    Block.FLOWER_YELLOW,
+    Block.DEAD_BUSH,
+    Block.SUGAR_CANE,
+    Block.CACTUS,
+  ]) {
+    IS_FLAMMABLE[b] = 1;
+  }
+})();
+
+// ---------------------------------------------------------------------------
 // Per-face tile mapping: TILE_INDEX[block*6 + face] -> atlas tile slot.
 // ---------------------------------------------------------------------------
 export const TILE_INDEX = new Uint16Array(BLOCK_COUNT * 6);

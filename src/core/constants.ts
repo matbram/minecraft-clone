@@ -270,9 +270,9 @@ export const EXPLOSION_SHAKE_R = 25; // screen-shake (camera trauma) falloff rad
 export const EXPLOSION_FIREBALL_R = 6; // Bay-exaggerated fireball radius
 export const EXPLOSION_SHOCKWAVE_SPEED = 40; // ring expansion (blocks/s) — outruns the fireball
 export const EXPLOSION_SHOCKWAVE_R = 15; // ring fades out by here
-export const EXPLOSION_FIRE_COUNT = 6; // temporary FIRE blocks dropped in the crater (× power)
-export const FIRE_LIFETIME_MIN = 4; // seconds a placed FIRE block lasts (min)
-export const FIRE_LIFETIME_MAX = 8; // seconds a placed FIRE block lasts (max)
+export const EXPLOSION_FIRE_COUNT = 8; // fires seeded across the crater at detonation (× power)
+export const FIRE_LIFETIME_MIN = 25; // seconds a fire cell flames (min) before smoldering out
+export const FIRE_LIFETIME_MAX = 45; // seconds a fire cell flames (max)
 // Phase 15.1: ammo + adjustable power. Every blast quantity scales by
 // power = AMMO[current].mul * Tunables.explosionPower, but the crater is capped here so a
 // "Nuke" can't carve an unbounded volume (it spans ~25 chunks at the cap). Knockback is
@@ -280,6 +280,17 @@ export const FIRE_LIFETIME_MAX = 8; // seconds a placed FIRE block lasts (max)
 export const EXPLOSION_CRATER_MAX = 32; // hard cap on carved crater radius (blocks)
 export const EXPLOSION_KNOCKBACK_MAX = 65; // cap on player knockback impulse (blocks/s)
 export const EXPLOSION_POWER_MAX = 8; // safety clamp on effective power for FX/damage scaling
+
+// Phase 15.2: living fire sim (FireSim, modeled on FluidSim). Fire cells flame for their
+// life, spread to + consume flammable blocks, then smolder (smoke only) and go out. All
+// bounded so a forest fire never storms the main thread.
+export const FIRE_TICK_DELAY = 5; // ticks between updates of a given fire cell (~0.25s @20TPS)
+export const MAX_FIRES = 300; // global cap on simultaneous fire cells
+export const MAX_FIRE_OPS_PER_TICK = 64; // fire cells processed per fixed step (throttle)
+export const FIRE_SPREAD_CHANCE = 0.28; // per-update chance to ignite a fuel-adjacent air neighbor
+export const FIRE_CONSUME_CHANCE = 0.34; // per-update chance to consume a flammable solid neighbor
+export const FIRE_SMOLDER_SECONDS = 18; // extra smoke-only time after the flames die
+export const FIRE_PARTICLE_CULL = 40; // only emit fire/smoke particles within this many blocks
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

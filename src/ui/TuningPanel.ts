@@ -149,6 +149,18 @@ function makeKnobs(time: { phase: number }): Knob[] {
       set: (s) => (Tunables.explosionPower = s / 100),
       fmt: (s) => `${(s / 100).toFixed(2)}×`,
     },
+    {
+      label: 'Fire duration',
+      desc: 'How long blast fires keep burning & smoking. Right = longer.',
+      group: 'Combat',
+      min: 25,
+      max: 400,
+      step: 25,
+      heavy: undefined,
+      get: () => Math.round(Tunables.fireDuration * 100),
+      set: (s) => (Tunables.fireDuration = s / 100),
+      fmt: (s) => `${(s / 100).toFixed(2)}×`,
+    },
   ];
 }
 
