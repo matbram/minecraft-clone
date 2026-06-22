@@ -20,7 +20,8 @@ import {
   FIRE_SMOLDER_SECONDS,
   worldToChunk,
 } from '../core/constants';
-import { Block, IS_FLAMMABLE } from '../core/BlockTypes';
+import { Block, FLAMMABILITY, SPREAD_MULT, BURN_SECONDS } from '../core/BlockTypes';
+import { Tunables } from '../core/tunables';
 import type { World } from './World';
 
 interface FireState {
@@ -131,9 +132,11 @@ export class FireSim {
     }
   }
 
-  // Consume flammable solids next to the flame (permanent) and spread into fuel-adjacent
-  // air. The vacated air from a consumed block gets ignited a tick later by an adjacent
-  // flame, so a blaze walks through a tree: log -> air -> fire -> ... Throttled by chance.
+  // Consume flammable solids next to the flame (permanent, at a material rate) and spread
+  // into fuel-adjacent air. The vacated air from a consumed block gets ignited a tick later
+  // by an adjacent flame, so a blaze walks through a tree: log -> air -> fire -> ... A new
+  // fire's life comes from the fuel it caught on (grass burns out fast, wood burns long), so
+  // non-flammable surroundings never catch -> the fire stays put and dies on schedule.
   private spread(f: FireState): void {
     for (const [dx, dy, dz] of DIRS) {
       const nx = f.x + dx;
@@ -141,16 +144,13 @@ export class FireSim {
       const nz = f.z + dz;
       if (ny < 0 || ny >= CY) continue;
       const b = this.world.getBlockWorld(nx, ny, nz);
-      if (IS_FLAMMABLE[b]) {
-        if (Math.random() < FIRE_CONSUME_CHANCE) this.world.editBlock(nx, ny, nz, Block.AIR, true); // burn away (permanent)
-      } else if (b === Block.AIR) {
-        if (
-          this.fires.size < MAX_FIRES &&
-          Math.random() < FIRE_SPREAD_CHANCE &&
-          this.bordersFuel(nx, ny, nz) &&
-          !this.bordersWater(nx, ny, nz)
-        ) {
-          this.ignite(nx, ny, nz, f.life);
+      const flam = FLAMMABILITY[b];
+      if (flam > 0) {
+        if (Math.random() < FIRE_CONSUME_CHANCE * SPREAD_MULT[b]) this.world.editBlock(nx, ny, nz, Block.AIR, true); // burn away (permanent)
+      } else if (b === Block.AIR && this.fires.size < MAX_FIRES && !this.bordersWater(nx, ny, nz)) {
+        const fuel = this.bestFuel(nx, ny, nz);
+        if (fuel.flam > 0 && Math.random() < FIRE_SPREAD_CHANCE * fuel.spread) {
+          this.ignite(nx, ny, nz, fuel.burn * Tunables.fireDuration);
         }
       }
     }
@@ -169,10 +169,19 @@ export class FireSim {
     return false;
   }
 
-  private bordersFuel(wx: number, wy: number, wz: number): boolean {
+  // Most-flammable solid neighbour of an air cell -> its catch ease, spread mult, burn time.
+  private bestFuel(wx: number, wy: number, wz: number): { flam: number; spread: number; burn: number } {
+    let flam = 0;
+    let spread = 0;
+    let burn = 0;
     for (const [dx, dy, dz] of DIRS) {
-      if (IS_FLAMMABLE[this.world.getBlockWorld(wx + dx, wy + dy, wz + dz)]) return true;
+      const b = this.world.getBlockWorld(wx + dx, wy + dy, wz + dz);
+      if (FLAMMABILITY[b] > flam) {
+        flam = FLAMMABILITY[b];
+        spread = SPREAD_MULT[b];
+        burn = BURN_SECONDS[b];
+      }
     }
-    return false;
+    return { flam, spread, burn };
   }
 }

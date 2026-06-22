@@ -158,7 +158,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
     [[0, 0], [1, 1]],
     [[1, 0], [0, 1]],
   ];
-  const emitCross = (lx: number, y: number, lz: number, tile: number, sky: number, blk: number, tr: number, tg: number, tb: number): void => {
+  const emitCross = (lx: number, y: number, lz: number, tile: number, sky: number, blk: number, tr: number, tg: number, tb: number, wave: number): void => {
     const col = tile % ATLAS_COLS;
     const row = Math.floor(tile / ATLAS_COLS);
     const u0 = col / ATLAS_COLS + INSET_U;
@@ -179,7 +179,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         opaque.normals.push(0, 1, 0);
         opaque.light.push(sky, blk, 1);
         opaque.uvs.push(u0 + cu * (u1 - u0), v0 + (1 - cv) * (v1 - v0));
-        opaque.wave.push(1);
+        opaque.wave.push(wave);
         opaque.refl.push(0);
         opaque.tint.push(tr, tg, tb);
       }
@@ -216,7 +216,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
           const sky = skyAt(wx, y, wz) / 15;
           const blk = blockLightAt(wx, y, wz) / 15;
           const t = CROSS_TINTED[b] ? bdef.grassTint : [1, 1, 1];
-          emitCross(lx, y, lz, tileOf(b, 2), sky, blk, t[0], t[1], t[2]);
+          emitCross(lx, y, lz, tileOf(b, 2), sky, blk, t[0], t[1], t[2], IS_FOLIAGE[b] ? 1 : 0);
           continue;
         }
 

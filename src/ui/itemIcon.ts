@@ -2,7 +2,7 @@
 // tile (the original behavior); edible items have no world tile, so they're drawn
 // procedurally. Keeps Hotbar + Inventory rendering identical and in one place.
 
-import { IS_EDIBLE, IS_WEAPON, ATLAS_COLS, representativeTile, type Block } from '../core/BlockTypes';
+import { Block, IS_EDIBLE, IS_WEAPON, ATLAS_COLS, representativeTile } from '../core/BlockTypes';
 import { TILE_PX } from '../render/atlas';
 
 export function drawIcon(
@@ -18,7 +18,8 @@ export function drawIcon(
     return;
   }
   if (IS_WEAPON[block]) {
-    drawLauncher(ctx, size);
+    if (block === Block.FLAMETHROWER) drawFlamethrower(ctx, size);
+    else drawLauncher(ctx, size);
     return;
   }
   const tile = representativeTile(block);
@@ -57,6 +58,41 @@ function drawLauncher(ctx: CanvasRenderingContext2D, s: number): void {
   // Pistol grip below.
   ctx.fillStyle = '#2b2f34';
   ctx.fillRect(-s * 0.08, s * 0.09, s * 0.08, s * 0.2);
+  ctx.restore();
+}
+
+// A flamethrower: red fuel tank, dark barrel + nozzle, pistol grip, and a flame at the tip.
+function drawFlamethrower(ctx: CanvasRenderingContext2D, s: number): void {
+  ctx.save();
+  ctx.translate(s * 0.5, s * 0.5);
+  ctx.rotate(-0.16);
+  // Fuel tank.
+  ctx.fillStyle = '#b5483a';
+  ctx.fillRect(-s * 0.42, -s * 0.15, s * 0.24, s * 0.32);
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillRect(-s * 0.38, -s * 0.13, s * 0.05, s * 0.28); // highlight
+  // Barrel.
+  ctx.fillStyle = '#3a4048';
+  ctx.fillRect(-s * 0.18, -s * 0.06, s * 0.52, s * 0.12);
+  // Nozzle.
+  ctx.fillStyle = '#54606b';
+  ctx.fillRect(s * 0.32, -s * 0.08, s * 0.06, s * 0.16);
+  // Pistol grip.
+  ctx.fillStyle = '#2b2f34';
+  ctx.fillRect(-s * 0.12, s * 0.06, s * 0.08, s * 0.2);
+  // Flame at the muzzle.
+  ctx.fillStyle = '#ffcc33';
+  ctx.beginPath();
+  ctx.moveTo(s * 0.38, -s * 0.09);
+  ctx.lineTo(s * 0.52, 0);
+  ctx.lineTo(s * 0.38, s * 0.09);
+  ctx.fill();
+  ctx.fillStyle = '#ff7a1e';
+  ctx.beginPath();
+  ctx.moveTo(s * 0.4, -s * 0.05);
+  ctx.lineTo(s * 0.5, 0);
+  ctx.lineTo(s * 0.4, s * 0.05);
+  ctx.fill();
   ctx.restore();
 }
 

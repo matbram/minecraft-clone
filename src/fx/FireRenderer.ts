@@ -14,6 +14,7 @@ import {
   FIRE_CUBE_SIZE,
   FIRE_CUBES_NEAR,
   FIRE_CUBES_FAR,
+  FIRE_RISE_SPEED,
 } from '../core/constants';
 import type { World } from '../world/World';
 
@@ -89,21 +90,42 @@ export class FireRenderer {
       if (strength <= 0) return;
       const s0 = (((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0) % 1000 / 1000 * TAU;
 
-      // Flame body: many small cubes SCATTERED through a cone that narrows with height.
-      for (let k = 0; k < cubes && this.n < MAX_FIRE_CUBES; k++) {
+      // CORE: a stable, hottest cluster of cubes at the base (the glowing coals) that just
+      // flicker — gives the flame a solid bright bottom and hides the rise-loop wrap.
+      const core = Math.round(cubes * 0.45);
+      for (let k = 0; k < core && this.n < MAX_FIRE_CUBES; k++) {
         const ph = s0 + k * 2.39;
-        // Height: spread up the column with a little per-cube jitter (denser near the base).
-        const t = Math.min(1, k / cubes + (hash01(ph) - 0.5) * 0.18);
-        const flick = 0.5 + 0.5 * Math.sin(time * 9 + ph);
-        // Scatter within a disc that shrinks toward the tip; sqrt for even area fill.
-        const radius = FIRE_FLAME_RADIUS * (1 - 0.65 * t) * Math.sqrt(hash01(ph + 1.3));
-        const ang = hash01(ph + 2.7) * TAU + time * 0.6;
-        const ox = Math.cos(ang) * radius + Math.sin(time * 3 + ph) * 0.05;
-        const oz = Math.sin(ang) * radius + Math.cos(time * 3 + ph) * 0.05;
-        const oy = t * FIRE_FLAME_HEIGHT * strength + Math.sin(time * 6 + ph) * 0.04;
-        const sc = FIRE_CUBE_SIZE * (1 - 0.4 * t) * (0.7 + 0.5 * flick) * strength;
+        const t = (core > 1 ? k / (core - 1) : 0) * 0.35; // base third -> hottest colours
+        const flick = 0.6 + 0.4 * Math.sin(time * 12 + ph);
+        const radius = FIRE_FLAME_RADIUS * (0.4 + 0.6 * hash01(ph + 1.3)) * (1 - 0.5 * t);
+        const ang = hash01(ph + 2.7) * TAU + time * 0.5;
+        const ox = Math.cos(ang) * radius + Math.sin(time * 4 + ph) * 0.04;
+        const oz = Math.sin(ang) * radius + Math.cos(time * 4 + ph) * 0.04;
+        const oy = t * FIRE_FLAME_HEIGHT * strength * 0.5;
+        const sc = FIRE_CUBE_SIZE * (1.1 - 0.3 * t) * (0.7 + 0.4 * flick) * strength;
         flameColor(this.col, t);
-        this.col.multiplyScalar(0.8 + 0.4 * flick);
+        this.col.multiplyScalar(0.85 + 0.3 * flick);
+        this.write(fx + ox, y + oy, fz + oz, sc);
+      }
+
+      // TONGUES: cubes that loop upward (per-cube rise phase), cooling + curling + shrinking
+      // and fading out near the top — so the flame visibly licks up and dies into smoke.
+      for (let k = core; k < cubes && this.n < MAX_FIRE_CUBES; k++) {
+        const ph = s0 + 17 + k * 2.39;
+        const p = (time * FIRE_RISE_SPEED + hash01(ph)) % 1; // 0 base .. 1 tip
+        const t = 0.2 + p * 0.8; // temperature: cools as it rises
+        const swirl = Math.sin(time * 2.3 + ph) + 0.5 * Math.sin(time * 3.9 + ph * 1.7);
+        const radius = FIRE_FLAME_RADIUS * (1 - 0.6 * p) * (0.3 + 0.7 * hash01(ph + 1.3));
+        const ang = hash01(ph + 2.7) * TAU + time * 0.9 + swirl * 0.6;
+        const ox = Math.cos(ang) * radius + swirl * 0.05 * (1 - p);
+        const oz = Math.sin(ang) * radius + Math.cos(time * 2.7 + ph) * 0.05 * (1 - p);
+        const oy = (0.1 + p * 0.95) * FIRE_FLAME_HEIGHT * strength;
+        const env = Math.min(1, p / 0.06) * Math.min(1, (1 - p) / 0.35); // ramp in at base, fade at tip
+        if (env <= 0.01) continue;
+        const flick = 0.7 + 0.3 * Math.sin(time * 10 + ph);
+        const sc = FIRE_CUBE_SIZE * (0.95 - 0.5 * p) * flick * strength * env;
+        flameColor(this.col, t);
+        this.col.multiplyScalar((0.8 + 0.3 * flick) * env);
         this.write(fx + ox, y + oy, fz + oz, sc);
       }
 

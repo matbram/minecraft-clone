@@ -8,7 +8,7 @@
 // few frames instead of doing a synchronous light BFS per block (which would freeze).
 
 import * as THREE from 'three';
-import { Block, IS_SOLID } from '../core/BlockTypes';
+import { Block, IS_SOLID, BURN_SECONDS } from '../core/BlockTypes';
 import {
   CY,
   EYE_HEIGHT,
@@ -24,8 +24,6 @@ import {
   EXPLOSION_KNOCKBACK_UP,
   EXPLOSION_POWER_MAX,
   EXPLOSION_FIRE_COUNT,
-  FIRE_LIFETIME_MIN,
-  FIRE_LIFETIME_MAX,
   FIRE_SEED_DROP,
   FIRE_SEED_SPREAD,
 } from '../core/constants';
@@ -142,7 +140,10 @@ export class Explosion {
       }
       const y = fireSurfaceY(this.world, ox, oz, top, bottom);
       if (y < 0) continue;
-      const life = (FIRE_LIFETIME_MIN + Math.random() * (FIRE_LIFETIME_MAX - FIRE_LIFETIME_MIN)) * lifeMul;
+      // Life from the surface material: bare ground flares briefly (~3s); grass/leaves/wood
+      // burn longer and the fire then spreads through them (FireSim).
+      const surface = this.world.getBlockWorld(ox, y - 1, oz);
+      const life = BURN_SECONDS[surface] * (0.7 + Math.random() * 0.6) * lifeMul;
       const before = this.world.activeFireCount;
       this.world.ignite(ox, y, oz, life);
       if (this.world.activeFireCount > before) placed++; // count only real ignitions (water/cap refusals retry)

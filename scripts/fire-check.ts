@@ -5,7 +5,7 @@
 import { World } from '../src/world/World';
 import { Chunk } from '../src/core/Chunk';
 import { generateChunk, surfaceHeight, findLandSpawn } from '../src/core/WorldGen';
-import { Block } from '../src/core/BlockTypes';
+import { Block, BURN_SECONDS } from '../src/core/BlockTypes';
 import { MAX_FIRES, FIRE_SEED_DROP } from '../src/core/constants';
 import { fireSurfaceY } from '../src/fx/Explosion';
 
@@ -67,9 +67,10 @@ const enumOk = enumerated === world.activeFireCount && enumerated >= 1 && anyFla
 console.log(`forEachFire: enumerated=${enumerated} activeCount=${world.activeFireCount} flaming=${anyFlaming} -> ${enumOk ? 'OK' : 'FAIL'}`);
 pass &&= enumOk;
 
-// 3. Tick the sim. Track peak fire count (spread => >1) and that the cap holds.
+// 3. Tick the sim. Track peak fire count (spread => >1) and that the cap holds. Run long
+//    enough for the slow, long-burning LOG fires (BURN_SECONDS 38 + smolder) to fully end.
 let peak = 0;
-for (let i = 0; i < 1000; i++) {
+for (let i = 0; i < 3000; i++) {
   world.tickFires(64);
   peak = Math.max(peak, world.activeFireCount);
 }
@@ -99,6 +100,44 @@ if (world.getBlockWorld(bx + 1, h + 4, bz) === Block.FIRE) fireBlocks++;
 const outOk = world.activeFireCount === 0 && fireBlocks === 0;
 console.log(`burn out: active=${world.activeFireCount} fireBlocks=${fireBlocks} -> ${outOk ? 'OK' : 'FAIL'}`);
 pass &&= outOk;
+
+// 5. Material model (Phase 15.5): wood burns far longer than grass/bare ground, and a fire
+//    on bare STONE with no fuel neighbours never spreads and burns out quickly.
+const burnDataOk =
+  BURN_SECONDS[Block.LOG] > BURN_SECONDS[Block.TALL_GRASS] && BURN_SECONDS[Block.TALL_GRASS] > BURN_SECONDS[Block.STONE];
+console.log(`burn data: log=${BURN_SECONDS[Block.LOG]} grass=${BURN_SECONDS[Block.TALL_GRASS]} stone=${BURN_SECONDS[Block.STONE]} -> ${burnDataOk ? 'OK' : 'FAIL'}`);
+pass &&= burnDataOk;
+
+const sx = bx - 8;
+const sy = h + 2;
+const sz = bz - 8;
+// Clear a barren box (no fuel within 2 cells) with a bare stone floor, so a fire here has
+// nothing to catch — it must stay put and burn out.
+for (let dx = -2; dx <= 2; dx++)
+  for (let dz = -2; dz <= 2; dz++) {
+    world.editBlock(sx + dx, sy - 1, sz + dz, Block.STONE);
+    for (let dy = 0; dy <= 2; dy++) world.editBlock(sx + dx, sy + dy, sz + dz, Block.AIR);
+  }
+world.ignite(sx, sy, sz, BURN_SECONDS[Block.STONE]);
+let stonePeak = 0;
+for (let i = 0; i < 600; i++) {
+  world.tickFires(64);
+  stonePeak = Math.max(stonePeak, world.activeFireCount);
+}
+const noSpreadOk = stonePeak <= 1 && world.activeFireCount === 0;
+console.log(`stone fire: peak=${stonePeak} end=${world.activeFireCount} (no spread, burns out) -> ${noSpreadOk ? 'OK' : 'FAIL'}`);
+pass &&= noSpreadOk;
+
+// 6. Torch (Phase 15.5): placing one lights the area (block light propagates to neighbours).
+const tx = bx + 8;
+const ty = h + 2;
+const tz = bz + 8;
+world.editBlock(tx + 1, ty, tz, Block.AIR); // make sure the sampled neighbour is air
+world.editBlock(tx, ty, tz, Block.TORCH);
+const litB = world.brightnessAt(tx + 1, ty, tz, 0); // skyMul 0 -> only the torch's block light
+const torchOk = litB > 0.4;
+console.log(`torch light: brightnessAt neighbour=${litB.toFixed(2)} -> ${torchOk ? 'OK' : 'FAIL'}`);
+pass &&= torchOk;
 
 console.log(pass ? 'FIRE: PASS' : 'FIRE: FAIL');
 process.exit(pass ? 0 : 1);

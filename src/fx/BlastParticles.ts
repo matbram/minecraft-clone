@@ -18,6 +18,7 @@ export interface BurstOpts {
   gravity?: number; // downward accel (blocks/s^2); negative = rises (default 0)
   up?: number; // extra initial upward velocity (default 0)
   spread?: number; // initial position jitter radius (default 0.3)
+  baseVel?: readonly [number, number, number]; // directional base velocity (e.g. a flamethrower jet)
 }
 
 type RGB = readonly [number, number, number];
@@ -85,11 +86,14 @@ export class BlastParticles {
   private readonly size0: Float32Array;
   private readonly endScale: Float32Array;
   private readonly alpha0: Float32Array;
+  private readonly drift: Float32Array; // per-particle phase for turbulent curl
   private count = 0;
   private readonly max: number;
+  private readonly curl: number; // horizontal curl strength (0 = none; >0 = billowing smoke)
 
-  constructor(scene: THREE.Scene, additive: boolean, max = 384) {
+  constructor(scene: THREE.Scene, additive: boolean, max = 384, curl = 0) {
     this.max = max;
+    this.curl = curl;
     this.pos = new Float32Array(max * 3);
     this.col = new Float32Array(max * 3);
     this.sizeAttr = new Float32Array(max);
@@ -103,6 +107,7 @@ export class BlastParticles {
     this.size0 = new Float32Array(max);
     this.endScale = new Float32Array(max);
     this.alpha0 = new Float32Array(max);
+    this.drift = new Float32Array(max);
 
     this.geom = new THREE.BufferGeometry();
     const mk = (arr: Float32Array, n: number) => {
@@ -144,6 +149,7 @@ export class BlastParticles {
     const up = opts.up ?? 0;
     const endScale = opts.endScale ?? 1;
     const alpha = opts.alpha ?? 1;
+    const bv = opts.baseVel;
     for (let i = 0; i < opts.count && this.count < this.max; i++) {
       const idx = this.count++;
       const u = Math.random() * 2 - 1;
@@ -156,9 +162,9 @@ export class BlastParticles {
       this.pos[idx * 3] = x + dx * spread * Math.random();
       this.pos[idx * 3 + 1] = y + dy * spread * Math.random();
       this.pos[idx * 3 + 2] = z + dz * spread * Math.random();
-      this.vx[idx] = dx * sp;
-      this.vy[idx] = dy * sp + up;
-      this.vz[idx] = dz * sp;
+      this.vx[idx] = dx * sp + (bv ? bv[0] : 0);
+      this.vy[idx] = dy * sp + up + (bv ? bv[1] : 0);
+      this.vz[idx] = dz * sp + (bv ? bv[2] : 0);
       const c = colors[(Math.random() * colors.length) | 0];
       this.col[idx * 3] = c[0] * bright;
       this.col[idx * 3 + 1] = c[1] * bright;
@@ -170,12 +176,13 @@ export class BlastParticles {
       this.size0[idx] = opts.size;
       this.endScale[idx] = endScale;
       this.alpha0[idx] = alpha;
+      this.drift[idx] = Math.random() * Math.PI * 2;
       this.sizeAttr[idx] = opts.size;
       this.alphaAttr[idx] = alpha;
     }
   }
 
-  update(dt: number): void {
+  update(dt: number, time = 0): void {
     let i = 0;
     while (i < this.count) {
       this.life[i] -= dt;
@@ -195,10 +202,17 @@ export class BlastParticles {
           this.size0[i] = this.size0[last];
           this.endScale[i] = this.endScale[last];
           this.alpha0[i] = this.alpha0[last];
+          this.drift[i] = this.drift[last];
         }
         continue;
       }
       this.vy[i] -= this.grav[i] * dt;
+      // Turbulent curl: oscillating horizontal drift makes smoke billow + swirl as it rises.
+      if (this.curl > 0) {
+        const d = this.drift[i];
+        this.vx[i] += Math.cos(time * 0.6 + d) * this.curl * dt;
+        this.vz[i] += Math.sin(time * 0.5 + d * 1.3) * this.curl * dt;
+      }
       this.pos[i * 3] += this.vx[i] * dt;
       this.pos[i * 3 + 1] += this.vy[i] * dt;
       this.pos[i * 3 + 2] += this.vz[i] * dt;

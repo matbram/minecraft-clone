@@ -17,6 +17,8 @@ export interface ISfx {
   playSplash(): void;
   playBubble(): void;
   playExplosion(distBlocks: number, power?: number): void;
+  startFlameroar(): void;
+  stopFlameroar(): void;
 }
 
 const MASTER_GAIN = 0.35;
@@ -44,6 +46,7 @@ export class Sfx implements ISfx {
   private submerged = false;
   private amb: { src: AudioBufferSourceNode; lfo: OscillatorNode } | null = null;
   private uwAmb: { src: AudioBufferSourceNode; lfo: OscillatorNode } | null = null;
+  private flame: { src: AudioBufferSourceNode; lfo: OscillatorNode; gain: GainNode } | null = null;
 
   // Create the context only inside a user gesture (autoplay policy).
   resume(): void {
@@ -256,6 +259,50 @@ export class Sfx implements ISfx {
       /* already stopped */
     }
     this.amb = null;
+  }
+
+  // Phase 15.5: flamethrower roar — a looping filtered-noise whoosh with a fast attack and a
+  // flicker LFO, started while firing and faded out on release. No-op until audio resumes.
+  startFlameroar(): void {
+    if (!this.ctx || !this.master || !this.noise || this.flame) return;
+    const ctx = this.ctx;
+    const src = ctx.createBufferSource();
+    src.buffer = this.noise;
+    src.loop = true;
+    src.playbackRate.value = 0.9;
+    const hp = ctx.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 120;
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 900;
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.22, ctx.currentTime + 0.08); // fast whoosh-in
+    const lfo = ctx.createOscillator();
+    lfo.type = 'sine';
+    lfo.frequency.value = 11; // crackly flicker
+    const lfoGain = ctx.createGain();
+    lfoGain.gain.value = 0.05;
+    lfo.connect(lfoGain).connect(gain.gain);
+    src.connect(hp).connect(lp).connect(gain).connect(this.master);
+    src.start();
+    lfo.start();
+    this.flame = { src, lfo, gain };
+  }
+
+  stopFlameroar(): void {
+    if (!this.flame || !this.ctx) return;
+    const f = this.flame;
+    this.flame = null;
+    try {
+      f.gain.gain.cancelScheduledValues(this.ctx.currentTime);
+      f.gain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.05);
+      f.src.stop(this.ctx.currentTime + 0.2);
+      f.lfo.stop(this.ctx.currentTime + 0.2);
+    } catch {
+      /* already stopped */
+    }
   }
 
   // Deep, slow-swelling rumble that replaces the surface ambience while submerged.

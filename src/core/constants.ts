@@ -304,6 +304,13 @@ export const FIRE_FLAME_RADIUS = 0.6; // horizontal flame spread at the base (bl
 export const FIRE_CUBE_SIZE = 0.16; // base voxel cube edge (blocks) — small, many, scattered
 export const FIRE_CUBES_NEAR = 32; // cubes per flame up close (LOD high)
 export const FIRE_CUBES_FAR = 8; // cubes per flame at FIRE_RENDER_DISTANCE (LOD low)
+export const FIRE_RISE_SPEED = 0.85; // flame-tongue rise loops per second (cubes lick upward + cool)
+
+// Phase 15.5: flamethrower (held weapon, hold-to-fire, unlimited fuel).
+export const FLAMETHROWER_RANGE = 9; // reach of the fire cone (blocks)
+export const FLAMETHROWER_CONE = 0.3; // ray jitter half-angle (radians) -> cone width
+export const FLAMETHROWER_RAYS = 5; // ignite/damage rays cast per frame
+export const FLAMETHROWER_DPS = 16; // damage per second to creatures in the cone
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

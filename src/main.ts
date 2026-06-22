@@ -19,6 +19,10 @@ import {
   MAX_FLUID_OPS_PER_TICK,
   MAX_FIRE_OPS_PER_TICK,
   FIRE_PARTICLE_CULL,
+  FLAMETHROWER_RANGE,
+  FLAMETHROWER_CONE,
+  FLAMETHROWER_RAYS,
+  FLAMETHROWER_DPS,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
@@ -30,8 +34,9 @@ import {
   worldToChunk,
 } from './core/constants';
 import { Tunables } from './core/tunables';
-import { Block, IS_WEAPON } from './core/BlockTypes';
+import { Block, IS_WEAPON, BURN_SECONDS } from './core/BlockTypes';
 import { AMMO } from './core/ammo';
+import { raycastVoxel } from './interaction/Raycast';
 import { findLandSpawn } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
@@ -252,11 +257,12 @@ world.onFireSample = (x, y, z, flaming) => {
   const dy = y - (player.pos.y + EYE_HEIGHT);
   const dz = z - player.pos.z;
   if (dx * dx + dy * dy + dz * dz > FIRE_PARTICLE_CULL * FIRE_PARTICLE_CULL) return;
-  // Flame is drawn as voxel cubes (FireRenderer); here we only add the rising smoke.
+  // Flame is drawn as voxel cubes (FireRenderer); here we add the rising smoke + embers.
   if (flaming) {
-    if (Math.random() < 0.6) effects.fireSmoke(x, y, z);
+    if (Math.random() < 0.7) effects.fireSmoke(x, y, z);
+    if (Math.random() < 0.5) effects.fireEmber(x, y, z); // glowing bits rising into the smoke
   } else {
-    effects.fireSmoke(x, y, z);
+    effects.fireSmoke(x, y, z); // smoldering: smoke only
   }
 };
 
@@ -283,6 +289,8 @@ let wasSubmerged = false; // edge-detect surface crossings for the splash
 let splashCooldown = 0; // rate-limits splash so bobbing at the surface doesn't spam
 let attackCooldown = 0; // Phase 12d: melee swing rate-limit
 let currentAmmo = 0; // Phase 15.1: selected rocket warhead (index into AMMO)
+let flameActive = false; // Phase 15.5: flamethrower roar loop on/off
+const flameDir = new THREE.Vector3(); // scratch for flamethrower cone rays
 let bubbleSfxTimer = 0; // throttles occasional bubble blips while submerged
 const uwFogColorSRGB = new THREE.Color(UNDERWATER_FOG_COLOR);
 const uwFogColorLinear = uwFogColorSRGB.clone().convertSRGBToLinear();
@@ -581,9 +589,42 @@ function frame(now: number): void {
     meleeBlocked = creatureHit.dist < blockDist;
   }
   interaction.setMeleeBlocked(meleeBlocked || weaponHeld);
-  ammoChip.style.display = weaponHeld ? 'block' : 'none'; // Phase 15.1: show ammo while armed
+  const held = hotbar.selected();
+  const isFlamethrower = held === Block.FLAMETHROWER;
+  ammoChip.style.display = weaponHeld && !isFlamethrower ? 'block' : 'none'; // ammo chip is rocket-only
   attackCooldown -= frameDt;
-  if (input.locked && input.isMouseDown(0) && attackCooldown <= 0) {
+  const firing = input.locked && input.isMouseDown(0);
+
+  // Phase 15.5: flamethrower — continuous (no cooldown) while held + firing. Emit the jet
+  // FX, cast a cone of rays to ignite surfaces (fire life from the hit material), and burn
+  // creatures in the cone; a roaring loop plays while firing.
+  if (isFlamethrower && firing) {
+    effects.flameJet(camera.position, tmpDir, FLAMETHROWER_RANGE);
+    for (let i = 0; i < FLAMETHROWER_RAYS; i++) {
+      flameDir.set(
+        tmpDir.x + (Math.random() - 0.5) * 2 * FLAMETHROWER_CONE,
+        tmpDir.y + (Math.random() - 0.5) * 2 * FLAMETHROWER_CONE,
+        tmpDir.z + (Math.random() - 0.5) * 2 * FLAMETHROWER_CONE,
+      );
+      const hit = raycastVoxel(world, camera.position, flameDir, FLAMETHROWER_RANGE);
+      if (hit) world.ignite(hit.place.x, hit.place.y, hit.place.z, BURN_SECONDS[hit.block] * Tunables.fireDuration);
+    }
+    const ch = fauna.raycast(camera.position, tmpDir, FLAMETHROWER_RANGE);
+    if (ch) {
+      const res = fauna.hit(ch.idx, camera.position, FLAMETHROWER_DPS * frameDt);
+      if (res && res.killed) effects.onCreatureDie(res.pos, res.color);
+    }
+    if (!flameActive) {
+      effects.startFlameroar();
+      flameActive = true;
+    }
+  } else if (flameActive) {
+    effects.stopFlameroar();
+    flameActive = false;
+  }
+
+  // Rocket launcher (discrete, cooldown) / melee.
+  if (firing && attackCooldown <= 0 && !isFlamethrower) {
     if (weaponHeld) {
       const power = AMMO[currentAmmo].mul * Tunables.explosionPower; // captured at fire time
       projectiles.fire(camera.position, tmpDir, power);

@@ -266,6 +266,32 @@ const PAINTERS: Record<number, Painter> = {
     }
   },
 
+  // Torch (Phase 15.5): a brown stick on the lower half with a bright white/yellow flame
+  // blob on top (transparent bg, so the cross-billboard cutout works + the flame blooms).
+  [Tile.TORCH]: (ctx, x0, y0, rnd) => {
+    ctx.clearRect(x0, y0, TILE_PX, TILE_PX);
+    const cx = 8;
+    // Stick: lower ~9px, 2px wide, brown with a little grain.
+    for (let y = 0; y < 9; y++) {
+      const f = 0.8 + rnd() * 0.25;
+      ctx.fillStyle = `rgb(${Math.round(120 * f)},${Math.round(80 * f)},${Math.round(40 * f)})`;
+      ctx.fillRect(x0 + cx - 1, y0 + (TILE_PX - 1 - y), 2, 1);
+    }
+    // Flame: bright blob around y=9..14, white-hot core fading to orange.
+    for (let y = 8; y < 15; y++) {
+      const up = (y - 8) / 6; // 0 base of flame .. 1 tip
+      const halfW = Math.max(0, (1 - up) * 2.6 - rnd());
+      for (let x = 0; x < TILE_PX; x++) {
+        if (Math.abs(x - cx) > halfW) continue;
+        const hot = 1 - up;
+        const g = Math.round(150 + hot * 105 + rnd() * 20);
+        const b = Math.round(40 + hot * hot * 150 * rnd());
+        ctx.fillStyle = `rgb(255,${Math.min(255, g)},${Math.min(255, b)})`;
+        ctx.fillRect(x0 + x, y0 + (TILE_PX - 1 - y), 1, 1);
+      }
+    }
+  },
+
   // Cactus: opaque green with darker vertical ribs.
   [Tile.CACTUS]: (ctx, x0, y0, rnd) => {
     for (let y = 0; y < TILE_PX; y++) {

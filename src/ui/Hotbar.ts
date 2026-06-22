@@ -7,10 +7,10 @@ const DEFAULT_SLOTS: Block[] = [
   Block.GRASS,
   Block.DIRT,
   Block.STONE,
-  Block.SAND,
+  Block.TORCH, // slot 4 (Phase 15.5): place to light dark places
   Block.WATER, // slot 5: placeable source — flows + fills (LEAVES still in inventory)
   Block.LOG,
-  Block.GLOWSTONE,
+  Block.FLAMETHROWER, // slot 7 (Phase 15.5): hold to throw fire
   Block.APPLE, // slot 8: an edible so survival's eat loop is reachable out of the box
   Block.ROCKET_LAUNCHER, // slot 9 (Phase 15): the launcher, equipped by default for play
 ];

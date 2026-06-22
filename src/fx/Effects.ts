@@ -12,6 +12,7 @@ import {
   EXPLOSION_SHOCKWAVE_R,
   EXPLOSION_SHOCKWAVE_SPEED,
   EXPLOSION_POWER_MAX,
+  FIRE_FLAME_HEIGHT,
 } from '../core/constants';
 import type { World } from '../world/World';
 import type { Input } from '../player/Input';
@@ -37,13 +38,18 @@ const FIRE_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
 ];
 const SPARK_PALETTE: ReadonlyArray<readonly [number, number, number]> = [[1.0, 1.0, 0.85]];
 const SMOKE_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
-  [0.32, 0.32, 0.32],
-  [0.22, 0.22, 0.22],
-  [0.42, 0.4, 0.38],
+  [0.16, 0.16, 0.16],
+  [0.09, 0.09, 0.1],
+  [0.22, 0.2, 0.17],
 ];
 const DUST_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
   [0.55, 0.46, 0.34],
   [0.42, 0.34, 0.24],
+];
+// Phase 15.5: glowing embers that rise out of the flames and drift up through the smoke.
+const EMBER_PALETTE: ReadonlyArray<readonly [number, number, number]> = [
+  [1.2, 0.6, 0.2],
+  [1.3, 0.85, 0.35],
 ];
 
 export class Effects {
@@ -63,6 +69,7 @@ export class Effects {
   private stepAccum = 0;
   private ambienceStarted = false;
   private lightMul = 1; // current sky-light multiplier (day/night) for tinting FX
+  private clock = 0; // seconds accumulated, drives particle curl turbulence
   private readonly flashEl: HTMLElement | null;
   private flashTimer: number | null = null;
   private lowFx = false; // Low preset: skip the shockwave + use fewer particles
@@ -72,8 +79,8 @@ export class Effects {
     this.player = player;
     this.tileColors = buildTileColors(atlas.canvas);
     this.particles = new Particles(scene);
-    this.fire = new BlastParticles(scene, true, 384);
-    this.smoke = new BlastParticles(scene, false, 512);
+    this.fire = new BlastParticles(scene, true, 384, 0.4); // gentle curl on embers/fireball
+    this.smoke = new BlastParticles(scene, false, 640, 1.1); // strong curl -> billowing smoke
     this.shockwave = new Shockwave(scene);
     this.drops = new ItemDrops(scene, world, atlas.texture);
     this.cameraFx = new CameraFx(input);
@@ -207,19 +214,79 @@ export class Effects {
     this.sfx.playExplosion(distToPlayer, p);
   }
 
-  // Phase 15.2/15.3: ongoing smoke from a burning cell (FireSim drives these via main,
-  // distance-culled). The flame itself is drawn as voxel cubes by FireRenderer — this is
-  // just the rising, growing, light-tinted smoke puff.
+  // Phase 15.2/15.5: ongoing smoke from a burning cell (FireSim drives these via main,
+  // distance-culled). Smoke is INTERTWINED with the flame: a thin wisp low inside the flame
+  // column + a thicker billowing plume seeded higher up, so smoke threads through the fire
+  // (rather than capping it) and the cooling tips become smoke. Curl (in BlastParticles)
+  // makes it turbulent. Tinted by local light.
   fireSmoke(x: number, y: number, z: number): void {
     const b = Math.max(0.2, this.world.brightnessAt(Math.floor(x), Math.floor(y), Math.floor(z), this.lightMul));
+    // Thin wisp woven low through the flames.
     this.smoke.burst(
       x,
-      y,
+      y + Math.random() * FIRE_FLAME_HEIGHT * 0.5,
       z,
       SMOKE_PALETTE,
-      { count: 1, speed: 0.5, life: 3.2, lifeVar: 0.4, size: 0.7, endScale: 3.0, alpha: 0.7, gravity: -0.5, up: 1.2, spread: 0.4 },
+      { count: 1, speed: 0.4, life: 1.8, lifeVar: 0.4, size: 0.4, endScale: 2.4, alpha: 0.45, gravity: -0.3, up: 0.9, spread: 0.25 },
       b,
     );
+    // Thicker plume rising from the cooling top of the flame upward.
+    this.smoke.burst(
+      x,
+      y + FIRE_FLAME_HEIGHT * (0.6 + Math.random() * 0.6),
+      z,
+      SMOKE_PALETTE,
+      { count: 1, speed: 0.5, life: 3.6, lifeVar: 0.4, size: 0.8, endScale: 3.4, alpha: 0.7, gravity: -0.5, up: 1.4, spread: 0.5 },
+      b,
+    );
+  }
+
+  // Phase 15.5: a tiny glowing ember rising out of the flames and drifting up through the
+  // smoke (additive -> blooms). The flame→smoke bridge from the reference.
+  fireEmber(x: number, y: number, z: number): void {
+    this.fire.burst(
+      x,
+      y + Math.random() * 0.4,
+      z,
+      EMBER_PALETTE,
+      { count: 1, speed: 0.4, life: 1.5, lifeVar: 0.5, size: 0.13, endScale: 0.5, gravity: -0.8, up: 1.7, spread: 0.2 },
+    );
+  }
+
+  // Phase 15.5: flamethrower jet FX — a forward cone of additive fire (flies along `dir`)
+  // + the occasional smoke puff downstream. Called every frame while firing.
+  flameJet(origin: THREE.Vector3, dir: THREE.Vector3, range: number): void {
+    const speed = range / 0.32; // particles cover ~range over their ~0.32s life
+    const bv: [number, number, number] = [dir.x * speed, dir.y * speed, dir.z * speed];
+    this.fire.burst(
+      origin.x + dir.x * 0.6,
+      origin.y + dir.y * 0.6,
+      origin.z + dir.z * 0.6,
+      FIRE_PALETTE,
+      { count: 4, speed: 1.6, life: 0.35, lifeVar: 0.4, size: 0.4, endScale: 1.5, gravity: -1, up: 0.2, spread: 0.25, baseVel: bv },
+    );
+    if (Math.random() < 0.6) {
+      const d = (0.4 + Math.random() * 0.6) * range;
+      const px = origin.x + dir.x * d;
+      const py = origin.y + dir.y * d;
+      const pz = origin.z + dir.z * d;
+      const b = Math.max(0.2, this.world.brightnessAt(Math.floor(px), Math.floor(py), Math.floor(pz), this.lightMul));
+      this.smoke.burst(
+        px,
+        py,
+        pz,
+        SMOKE_PALETTE,
+        { count: 1, speed: 0.5, life: 1.6, size: 0.5, endScale: 2.6, alpha: 0.5, gravity: -0.3, up: 0.7, spread: 0.4, baseVel: [bv[0] * 0.3, bv[1] * 0.3, bv[2] * 0.3] },
+        b,
+      );
+    }
+  }
+
+  startFlameroar(): void {
+    this.sfx.startFlameroar();
+  }
+  stopFlameroar(): void {
+    this.sfx.stopFlameroar();
   }
 
   // Phase 11.5 underwater: muffle + ambience swap (safe to call every frame — Sfx
@@ -238,9 +305,10 @@ export class Effects {
   update(dt: number, camera: THREE.PerspectiveCamera, lightMul: number): void {
     const p = this.player;
     this.lightMul = lightMul;
+    this.clock += dt;
     this.particles.update(dt);
-    this.fire.update(dt);
-    this.smoke.update(dt);
+    this.fire.update(dt, this.clock);
+    this.smoke.update(dt, this.clock);
     this.shockwave.update(dt);
 
     this.eye.set(p.pos.x, p.pos.y + EYE_HEIGHT, p.pos.z);

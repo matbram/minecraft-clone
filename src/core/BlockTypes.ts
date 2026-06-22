@@ -49,6 +49,10 @@ export enum Block {
   // by explosions; it auto-reverts to AIR after a few seconds.
   ROCKET_LAUNCHER,
   FIRE,
+  // Phase 15.5: TORCH is a placeable light source (rendered as a small flame billboard).
+  // FLAMETHROWER is a held weapon (never placed/meshed — procedural icon).
+  TORCH,
+  FLAMETHROWER,
   COUNT,
 }
 
@@ -105,9 +109,10 @@ export const Tile = {
   SEAGRASS: 31,
   CORAL: 32,
   FIRE: 33, // Phase 15: explosion fire (cross-billboard, emissive)
+  TORCH: 34, // Phase 15.5: placeable torch (stick + flame, emissive)
 } as const;
 
-export const ATLAS_TILES = 34; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
+export const ATLAS_TILES = 35; // number of distinct tiles (atlas grid is 16 wide -> 3 rows)
 export const ATLAS_COLS = 16; // tiles per atlas row
 
 // ---------------------------------------------------------------------------
@@ -173,9 +178,18 @@ export const CROSS_TINTED = new Uint8Array(BLOCK_COUNT);
   // Apple is a held item, never a world block: not solid (never collided/meshed).
   IS_SOLID[Block.APPLE] = 0;
   IS_TRANSPARENT[Block.APPLE] = 1;
-  // Rocket launcher is a held weapon item: same (never placed/meshed/collided).
+  // Rocket launcher + flamethrower are held weapon items (never placed/meshed/collided).
   IS_SOLID[Block.ROCKET_LAUNCHER] = 0;
   IS_TRANSPARENT[Block.ROCKET_LAUNCHER] = 1;
+  IS_SOLID[Block.FLAMETHROWER] = 0;
+  IS_TRANSPARENT[Block.FLAMETHROWER] = 1;
+
+  // Phase 15.5: TORCH — placeable light source, rendered as a small cross billboard (a
+  // stick + flame). Non-solid, transparent, emits light 14, and does NOT wave (IS_FOLIAGE 0).
+  IS_CROSS[Block.TORCH] = 1;
+  IS_SOLID[Block.TORCH] = 0;
+  IS_TRANSPARENT[Block.TORCH] = 1;
+  LIGHT_EMISSION[Block.TORCH] = 14;
 })();
 
 // ---------------------------------------------------------------------------
@@ -199,27 +213,43 @@ export const EDIBLE: Block[] = [Block.APPLE];
 export const IS_WEAPON = new Uint8Array(BLOCK_COUNT);
 (function initWeapons() {
   IS_WEAPON[Block.ROCKET_LAUNCHER] = 1;
+  IS_WEAPON[Block.FLAMETHROWER] = 1;
 })();
 
-export const WEAPONS: Block[] = [Block.ROCKET_LAUNCHER];
+export const WEAPONS: Block[] = [Block.ROCKET_LAUNCHER, Block.FLAMETHROWER];
 
 // ---------------------------------------------------------------------------
-// Phase 15.2: flammable blocks — fire (FireSim) spreads to and consumes these.
-// Vegetation + wood; stone/dirt/sand/etc. don't burn. (FIRE itself is excluded.)
+// Phase 15.5: per-material flammability. Every surface can hold a fire (every blast
+// always makes some), but materials differ:
+//   FLAMMABILITY  0..1  ease of CATCHING from a neighbouring fire (0 = never catches/spreads)
+//   SPREAD_MULT   mult on the base spread/consume chance (how fast it propagates/burns away)
+//   BURN_SECONDS  how long a fire AT/ON this block burns (bare ground = a brief flare;
+//                 grass = short; wood = long). Defaults to NON_FUEL_BURN for everything.
+// IS_FLAMMABLE is kept as the derived "FLAMMABILITY > 0" for any simple checks.
 // ---------------------------------------------------------------------------
+const NON_FUEL_BURN = 3; // seconds a fire flares on bare/non-flammable ground before dying
+export const FLAMMABILITY = new Float32Array(BLOCK_COUNT);
+export const SPREAD_MULT = new Float32Array(BLOCK_COUNT);
+export const BURN_SECONDS = new Float32Array(BLOCK_COUNT);
 export const IS_FLAMMABLE = new Uint8Array(BLOCK_COUNT);
-(function initFlammable() {
-  for (const b of [
-    Block.LOG,
-    Block.LEAVES,
-    Block.TALL_GRASS,
-    Block.FERN,
-    Block.FLOWER_RED,
-    Block.FLOWER_YELLOW,
-    Block.DEAD_BUSH,
-    Block.SUGAR_CANE,
-    Block.CACTUS,
-  ]) {
+(function initFlammability() {
+  BURN_SECONDS.fill(NON_FUEL_BURN); // any surface flares briefly even if it can't sustain fire
+  // [block, flammability, spreadMult, burnSeconds]
+  const F: [Block, number, number, number][] = [
+    [Block.LEAVES, 1.0, 1.6, 6],
+    [Block.TALL_GRASS, 1.0, 1.5, 4],
+    [Block.FERN, 1.0, 1.5, 4],
+    [Block.FLOWER_RED, 0.9, 1.3, 4],
+    [Block.FLOWER_YELLOW, 0.9, 1.3, 4],
+    [Block.DEAD_BUSH, 1.0, 1.7, 3],
+    [Block.SUGAR_CANE, 0.8, 1.0, 5],
+    [Block.LOG, 0.5, 0.4, 38], // hard to light, slow to spread, burns a long time
+    [Block.CACTUS, 0.5, 0.4, 12],
+  ];
+  for (const [b, fl, sp, bt] of F) {
+    FLAMMABILITY[b] = fl;
+    SPREAD_MULT[b] = sp;
+    BURN_SECONDS[b] = bt;
     IS_FLAMMABLE[b] = 1;
   }
 })();
@@ -274,6 +304,7 @@ function setFaces(b: Block, top: number, bottom: number, side: number): void {
   setAllFaces(Block.SEAGRASS, Tile.SEAGRASS);
   setAllFaces(Block.CORAL, Tile.CORAL);
   setAllFaces(Block.FIRE, Tile.FIRE);
+  setAllFaces(Block.TORCH, Tile.TORCH);
 })();
 
 export function tileOf(block: Block, face: number): number {
@@ -320,6 +351,7 @@ export const HARDNESS = new Float32Array(BLOCK_COUNT);
   HARDNESS[Block.SEAGRASS] = 0;
   HARDNESS[Block.CORAL] = 0.3;
   HARDNESS[Block.FIRE] = 0; // temporary; instantly clears if targeted
+  HARDNESS[Block.TORCH] = 0; // instant break (place freely while exploring)
   HARDNESS[Block.BEDROCK] = Infinity;
 })();
 
@@ -361,6 +393,7 @@ export const PLACEABLE: Block[] = [
   Block.KELP,
   Block.SEAGRASS,
   Block.CORAL,
+  Block.TORCH,
 ];
 
 // Representative atlas tile for a block's inventory/hotbar icon (its top face).
