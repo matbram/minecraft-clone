@@ -230,8 +230,9 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
         // Phase 17: smoothed + feathered top-corner heights (index = vx*2+vz) shared with the
         // WaterSurfaceMesh sheet (waterCornerHeight) so the cube SIDE lip meets the sheet
         // exactly at cliffs/shores/waterfalls (watertight). Only computed for SURFACE water
-        // (air above) — buried interior cells render full height and skip this.
-        const exposedTop = isWater && blockAt(wx, y + 1, wz) !== Block.WATER;
+        // (air above) — buried interior cells render full height and skip this. Must match
+        // WaterSurfaceMesh's AIR-only rule so the side lip only feathers under the real sheet.
+        const exposedTop = isWater && blockAt(wx, y + 1, wz) === Block.AIR;
         let cH0 = 1, cH1 = 1, cH2 = 1, cH3 = 1;
         if (exposedTop) {
           cH0 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 0, 0);

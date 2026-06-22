@@ -88,9 +88,11 @@ export function buildWaterMesh(world: World, cx: number, cz: number): WaterMeshA
         if (self.getBlock(lx, y, lz) !== Block.WATER) continue;
         const wx = baseX + lx;
         const wz = baseZ + lz;
-        // Only EXPOSED water tops (air/non-water above) get a surface quad; buried
-        // interior cells contribute nothing (their volume is the block mesh's job).
-        if (blockAt(wx, y + 1, wz) === Block.WATER) continue;
+        // Only the TRUE water surface (water meets AIR) gets a quad. Water capped by a
+        // non-air block — a flooded ocean-cave ceiling, a terrain overhang, sea ice, or a
+        // seabed plant — is NOT a surface; emitting there paved a chaotic submerged second
+        // sheet across the seabed (the shoreline shards + the night foam outlines).
+        if (blockAt(wx, y + 1, wz) !== Block.AIR) continue;
 
         // Shared corner heights (and foam) -> seamless with neighbours + the cube lip.
         const h00 = waterCornerHeight(blockAt, waterHeightAt, wx, y, wz, 0, 0);
