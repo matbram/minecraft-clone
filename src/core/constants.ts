@@ -316,6 +316,19 @@ export const FLAMETHROWER_DPS = 16; // damage per second to creatures in the con
 export const THIRD_PERSON_DIST = 3.2; // how far the third-person camera sits from the eye (blocks)
 export const THIRD_PERSON_MARGIN = 0.25; // keep-out gap when the camera pulls in against terrain
 
+// Phase 15.7: placed-torch particle flame (mirrors FireRenderer) + dynamic held-torch light.
+export const TORCH_RENDER_DISTANCE = 64; // draw placed-torch flames within this many blocks
+export const MAX_TORCH_CUBES = 2500; // instance pool cap for all visible torch flames
+export const TORCH_FLAME_CUBES_NEAR = 10; // cubes per torch flame up close (LOD high)
+export const TORCH_FLAME_CUBES_FAR = 3; // cubes per torch flame far away (LOD low)
+export const TORCH_FLAME_BASE_Y = 0.55; // flame base above the cell floor (top of the stick)
+export const TORCH_FLAME_HEIGHT = 0.36; // flame column height (blocks)
+export const TORCH_FLAME_RADIUS = 0.075; // horizontal flame spread (blocks)
+export const TORCH_FLAME_CUBE_SIZE = 0.085; // base voxel cube edge (blocks)
+export const TORCH_LIGHT_RANGE = 10; // dynamic held-torch light reach (blocks)
+export const TORCH_LIGHT_INTENSITY = 0.9; // held-torch light strength (~LIGHT_EMISSION 14/15)
+export const TORCH_LIGHT_COLOR = 0xffb060; // warm orange held-torch light
+
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel
 // `fluid` byte per cell (only meaningful where the block id is WATER):

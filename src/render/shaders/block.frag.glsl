@@ -31,6 +31,12 @@ uniform float uShadowTexel;
 uniform sampler2D uReflectMap;
 uniform float uReflectStrength;
 
+// Phase 15.7 — dynamic held-torch point light. uTorchIntensity == 0 -> no contribution.
+uniform vec3 uTorchPos;
+uniform vec3 uTorchColor;
+uniform float uTorchRange;
+uniform float uTorchIntensity;
+
 varying vec2 vUv;
 varying vec3 vLight; // x=sky, y=block, z=ao
 varying float vFogDepth;
@@ -107,6 +113,15 @@ void main() {
   vec3 lit = max(vec3(vLight.y), skyTerm * uSkyLightColor);
   lit = max(lit, vec3(uAmbient));                                  // cave floor
   lit *= vLight.z;                                                 // ambient occlusion
+
+  // Phase 15.7 — dynamic held-torch point light: a warm, distance-attenuated glow added to
+  // the lit term (so it illuminates the texture like real block light, not a white wash).
+  // uTorchIntensity == 0 when not holding a torch -> the term vanishes.
+  if (uTorchIntensity > 0.0) {
+    float td = length(uTorchPos - vWorldPos);
+    float ta = clamp(1.0 - td / uTorchRange, 0.0, 1.0);
+    lit += uTorchColor * (ta * ta * uTorchIntensity);
+  }
 
   // Underwater caustics: rippling SUN light on sky-exposed up-faces only (so it has
   // a real source). Scaled by daylight (gone at night) and fading with depth.

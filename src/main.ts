@@ -25,6 +25,7 @@ import {
   FLAMETHROWER_DPS,
   THIRD_PERSON_DIST,
   THIRD_PERSON_MARGIN,
+  TORCH_LIGHT_INTENSITY,
   EYE_HEIGHT,
   RESPAWN_FLASH_SECONDS,
   REACH,
@@ -58,6 +59,7 @@ import { Effects } from './fx/Effects';
 import { Projectiles } from './fx/Projectiles';
 import { Explosion } from './fx/Explosion';
 import { FireRenderer } from './fx/FireRenderer';
+import { TorchRenderer } from './fx/TorchRenderer';
 import { ViewModel } from './fx/ViewModel';
 import { PlayerModel } from './render/PlayerModel';
 import { DayNight } from './render/DayNight';
@@ -221,6 +223,7 @@ const effects = new Effects(scene, world, input, player, atlas, document.getElem
 const fauna = new Fauna(scene, world); // Phase 12c: wandering biome creatures
 const projectiles = new Projectiles(scene, world, fauna); // Phase 15: rocket projectiles
 const fireRenderer = new FireRenderer(scene); // Phase 15.3: voxel-cube flames for FireSim
+const torchRenderer = new TorchRenderer(scene); // Phase 15.7: particle flames for placed torches
 // Phase 15.6: first-person held item (child of the camera) + third-person body. The torch
 // flame on either reuses the rocket flame ramp; embers spawn via effects.fireEmber.
 const viewModel = new ViewModel(camera, atlas.texture);
@@ -677,6 +680,7 @@ function frame(now: number): void {
     (pos, power) => explosion.detonate(pos, power),
   );
   fireRenderer.update(world, camera, now / 1000); // Phase 15.3: draw voxel flames for active fires
+  torchRenderer.update(world, camera, now / 1000); // Phase 15.7: draw particle flames for placed torches
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the
@@ -773,6 +777,16 @@ function frame(now: number): void {
   materials.shared.uFogDensity.value = dayNight.fogDensity * (1 - altT);
   materials.shared.uSunDir.value.copy(dayNight.sunDir);
   materials.shared.uSkyLightColor.value.copy(dayNight.skyLightColor);
+
+  // Phase 15.7 — dynamic held-torch light: illuminate terrain around the player (from the
+  // eye, so it's right in first- AND third-person) whenever a torch is held; a subtle
+  // flicker keeps it alive. Off (intensity 0 -> shader no-op) for any other item.
+  if (heldBlock === Block.TORCH) {
+    materials.shared.uTorchPos.value.copy(eyePos);
+    materials.shared.uTorchIntensity.value = TORCH_LIGHT_INTENSITY * (0.9 + 0.1 * Math.sin(now / 1000 * 11));
+  } else {
+    materials.shared.uTorchIntensity.value = 0;
+  }
 
   // Underwater (Phase 5/7b/8b/11.2): override the shared fog (DayNight rewrote it just
   // above, so this auto-clears on surfacing). The veil COLOUR shifts shallow->deep by

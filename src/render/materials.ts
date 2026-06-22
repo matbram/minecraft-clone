@@ -10,6 +10,8 @@ import {
   WIND_SPEED,
   WIND_STRENGTH,
   SHADOW_MAP_SIZE,
+  TORCH_LIGHT_COLOR,
+  TORCH_LIGHT_RANGE,
 } from '../core/constants';
 import vertexShader from './shaders/block.vert.glsl?raw';
 import fragmentShader from './shaders/block.frag.glsl?raw';
@@ -48,6 +50,11 @@ export interface Materials {
     uReflectMap: { value: THREE.Texture | null };
     uReflectMatrix: { value: THREE.Matrix4 };
     uReflectStrength: { value: number };
+    // Phase 15.7 — dynamic held-torch point light (uTorchIntensity=0 disables it).
+    uTorchPos: { value: THREE.Vector3 };
+    uTorchColor: { value: THREE.Color };
+    uTorchRange: { value: number };
+    uTorchIntensity: { value: number };
   };
 }
 
@@ -77,6 +84,10 @@ export function createMaterials(atlas: THREE.Texture, fogColor: THREE.Color): Ma
     uReflectMap: { value: null as THREE.Texture | null },
     uReflectMatrix: { value: new THREE.Matrix4() },
     uReflectStrength: { value: 0 },
+    uTorchPos: { value: new THREE.Vector3() },
+    uTorchColor: { value: new THREE.Color(TORCH_LIGHT_COLOR) },
+    uTorchRange: { value: TORCH_LIGHT_RANGE },
+    uTorchIntensity: { value: 0 },
   };
 
   const opaque = new THREE.ShaderMaterial({

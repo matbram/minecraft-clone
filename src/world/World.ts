@@ -38,6 +38,11 @@ export class World {
   private readonly fluidSim = new FluidSim(this);
   private readonly fireSim = new FireSim(this);
 
+  // Phase 15.7: positions of placed TORCH blocks, so TorchRenderer can draw a particle
+  // flame at each (mirrors FireSim.forEachFire). Maintained on editBlock + applyEdits;
+  // worldgen never places torches, so the player edit path is the only source.
+  private readonly torches = new Map<string, { x: number; y: number; z: number }>();
+
   // Phase 15.2: set by main — FireSim asks for a flame/smoke particle at a burning cell
   // (`flaming` = active flame vs smoldering). main distance-culls + routes to Effects.
   onFireSample: (x: number, y: number, z: number, flaming: boolean) => void = () => {};
@@ -186,6 +191,9 @@ export class World {
     const oldB = chunk.getBlock(lx, wy, lz); // capture BEFORE the change for lighting
     chunk.setBlock(lx, wy, lz, type);
     if (type === Block.WATER) chunk.setFluid(lx, wy, lz, 0); // player-placed water is a source
+    // Phase 15.7: keep the torch registry (for the particle flame) in sync with edits.
+    if (type === Block.TORCH) this.torches.set(`${wx},${wy},${wz}`, { x: wx, y: wy, z: wz });
+    else if (oldB === Block.TORCH) this.torches.delete(`${wx},${wy},${wz}`);
 
     if (persist) {
       const key = chunkKey(cx, cz);
@@ -268,7 +276,18 @@ export class World {
       const lz = Math.floor(rem / CX);
       const lx = rem % CX;
       chunk.setBlock(lx, y, lz, type);
+      // Phase 15.7: re-register replayed torches (this path bypasses editBlock).
+      if (type === Block.TORCH) {
+        const wx = chunk.cx * CX + lx;
+        const wz = chunk.cz * CZ + lz;
+        this.torches.set(`${wx},${y},${wz}`, { x: wx, y, z: wz });
+      }
     }
+  }
+
+  // Phase 15.7: enumerate placed torches (TorchRenderer distance-culls). Mirrors forEachFire.
+  forEachTorch(cb: (x: number, y: number, z: number) => void): void {
+    for (const t of this.torches.values()) cb(t.x, t.y, t.z);
   }
 
   // Apply blocks other chunks queued INTO this chunk, then clear its queue.
