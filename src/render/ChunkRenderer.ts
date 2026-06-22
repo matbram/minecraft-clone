@@ -21,6 +21,11 @@ export class ChunkRenderer {
   private readonly waterMat: THREE.Material;
   private readonly meshes = new Map<string, ChunkMeshes>();
   private waterVisible = true; // Phase 17: gated on QualitySettings.waterSurface
+  private waterCount = 0; // Phase 17: number of chunks with a water mesh (perf early-out)
+  // Phase 17: scratch for the "is any water on screen" frustum test (skip the capture).
+  private readonly frustum = new THREE.Frustum();
+  private readonly viewProj = new THREE.Matrix4();
+  private readonly sphere = new THREE.Sphere();
 
   constructor(scene: THREE.Scene, mats: Materials, waterMat: THREE.Material) {
     this.scene = scene;
@@ -93,6 +98,7 @@ export class ChunkRenderer {
       this.scene.remove(old);
       old.geometry.dispose();
       entry.water = undefined;
+      this.waterCount--;
     }
     if (!arrays) return;
     const mesh = new THREE.Mesh(this.buildWaterGeometry(arrays), this.waterMat);
@@ -105,6 +111,27 @@ export class ChunkRenderer {
     mesh.visible = this.waterVisible;
     this.scene.add(mesh);
     entry.water = mesh;
+    this.waterCount++;
+  }
+
+  // Phase 17 perf: is any water surface inside the camera frustum? Cinematic skips the
+  // (full-scene) refraction capture when the answer is no — so deserts/mountains/caves and
+  // looking-away-from-water cost nothing. Water meshes don't rotate/scale, so the world
+  // bounding sphere is just the local sphere + the chunk-origin offset.
+  waterOnScreen(camera: THREE.PerspectiveCamera): boolean {
+    if (!this.waterVisible || this.waterCount === 0) return false;
+    this.viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.viewProj);
+    for (const entry of this.meshes.values()) {
+      const m = entry.water;
+      if (!m) continue;
+      const bs = m.geometry.boundingSphere;
+      if (!bs) continue;
+      this.sphere.copy(bs);
+      this.sphere.center.add(m.position);
+      if (this.frustum.intersectsSphere(this.sphere)) return true;
+    }
+    return false;
   }
 
   private applyPass(
@@ -148,6 +175,7 @@ export class ChunkRenderer {
     const key = chunkKey(cx, cz);
     const entry = this.meshes.get(key);
     if (!entry) return;
+    if (entry.water) this.waterCount--;
     for (const m of [entry.opaque, entry.transparent, entry.water]) {
       if (m) {
         this.scene.remove(m);

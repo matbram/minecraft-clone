@@ -932,10 +932,15 @@ function frame(now: number): void {
   // too, then the planar water reflection. Both restore render target/override.
   if (settings.shadows) shadowMapper.render(renderer, scene, camera.position, dayNight);
   if (settings.waterReflections) planarReflection.render(renderer, scene, camera);
-  // Phase 17 (Cinematic): capture the opaque scene + depth for water refraction. Skip
-  // when submerged (the surface is back-face culled from below; WaterCeiling handles it).
-  if (settings.waterRefraction && !submerged) sceneCapture.capture(renderer, scene, camera);
-  else sceneCapture.setActive(false);
+  // Phase 17 (Cinematic): capture the opaque scene + depth for water refraction. Skip when
+  // submerged (the surface is back-face culled from below; WaterCeiling handles it) and when
+  // no water is on screen (deserts/caves/looking away cost nothing — one extra full-scene
+  // render only when it's actually needed).
+  if (settings.waterRefraction && !submerged && chunkRenderer.waterOnScreen(camera)) {
+    sceneCapture.capture(renderer, scene, camera);
+  } else {
+    sceneCapture.setActive(false);
+  }
 
   if (settings.usePost) {
     if (settings.godRays) {
