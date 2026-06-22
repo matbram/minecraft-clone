@@ -290,7 +290,17 @@ export const MAX_FIRE_OPS_PER_TICK = 64; // fire cells processed per fixed step 
 export const FIRE_SPREAD_CHANCE = 0.28; // per-update chance to ignite a fuel-adjacent air neighbor
 export const FIRE_CONSUME_CHANCE = 0.34; // per-update chance to consume a flammable solid neighbor
 export const FIRE_SMOLDER_SECONDS = 18; // extra smoke-only time after the flames die
-export const FIRE_PARTICLE_CULL = 40; // only emit fire/smoke particles within this many blocks
+export const FIRE_PARTICLE_CULL = 40; // only emit smoke particles within this many blocks
+
+// Phase 15.3: voxel-cube flames (FireRenderer). Each flaming cell draws a flickering
+// tapering cluster of small emissive additive cubes (white-hot core -> orange/red tips +
+// embers); bloom makes the core glow. Instanced -> one draw call, LOD by distance.
+export const MAX_FIRE_CUBES = 4000; // instance pool cap (nearest fires win)
+export const FIRE_RENDER_DISTANCE = 96; // draw flames within this many blocks of the camera
+export const FIRE_FLAME_HEIGHT = 1.7; // flame column height (blocks) at full strength
+export const FIRE_CUBE_SIZE = 0.3; // base voxel cube edge (blocks)
+export const FIRE_CUBES_NEAR = 12; // cubes per flame up close (LOD high)
+export const FIRE_CUBES_FAR = 3; // cubes per flame at FIRE_RENDER_DISTANCE (LOD low)
 
 // ---------------------------------------------------------------------------
 // Phase 6: flowing water (Minecraft-style). The flow level lives in a parallel

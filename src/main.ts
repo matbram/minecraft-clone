@@ -50,6 +50,7 @@ import { Interaction } from './interaction/Interaction';
 import { Effects } from './fx/Effects';
 import { Projectiles } from './fx/Projectiles';
 import { Explosion } from './fx/Explosion';
+import { FireRenderer } from './fx/FireRenderer';
 import { DayNight } from './render/DayNight';
 import { Sky } from './render/Sky';
 import { SunMoon } from './render/SunMoon';
@@ -210,6 +211,7 @@ const interaction = new Interaction(world, input, player, hotbar, outline, break
 const effects = new Effects(scene, world, input, player, atlas, document.getElementById('explosion-flash'));
 const fauna = new Fauna(scene, world); // Phase 12c: wandering biome creatures
 const projectiles = new Projectiles(scene, world, fauna); // Phase 15: rocket projectiles
+const fireRenderer = new FireRenderer(scene); // Phase 15.3: voxel-cube flames for FireSim
 interaction.onBreak = (b, x, y, z) => effects.onBreak(b, x, y, z);
 interaction.onPlace = (b) => effects.onPlace(b);
 let audioResumed = false;
@@ -250,9 +252,9 @@ world.onFireSample = (x, y, z, flaming) => {
   const dy = y - (player.pos.y + EYE_HEIGHT);
   const dz = z - player.pos.z;
   if (dx * dx + dy * dy + dz * dz > FIRE_PARTICLE_CULL * FIRE_PARTICLE_CULL) return;
+  // Flame is drawn as voxel cubes (FireRenderer); here we only add the rising smoke.
   if (flaming) {
-    effects.fireEmber(x, y, z);
-    if (Math.random() < 0.5) effects.fireSmoke(x, y, z);
+    if (Math.random() < 0.6) effects.fireSmoke(x, y, z);
   } else {
     effects.fireSmoke(x, y, z);
   }
@@ -600,6 +602,7 @@ function frame(now: number): void {
     (x, y, z) => effects.explosionTrail(x, y, z),
     (pos, power) => explosion.detonate(pos, power),
   );
+  fireRenderer.update(world, camera, now / 1000); // Phase 15.3: draw voxel flames for active fires
 
   // Underwater state (computed once; camera is final after view-bob). Nothing is
   // hidden: the surface light (sky/sun/moon/stars/clouds + rays) is ABSORBED by the

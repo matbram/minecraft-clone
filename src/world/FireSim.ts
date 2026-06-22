@@ -55,6 +55,11 @@ export class FireSim {
     return this.fires.size;
   }
 
+  // Phase 15.3: enumerate active fires for the voxel-flame renderer (read-only, per frame).
+  forEachFire(cb: (x: number, y: number, z: number, age: number, life: number, flaming: boolean) => void): void {
+    for (const f of this.fires.values()) cb(f.x, f.y, f.z, f.age, f.life, f.flaming);
+  }
+
   private loaded(wx: number, wz: number): boolean {
     return !!this.world.getChunk(worldToChunk(wx), worldToChunk(wz));
   }

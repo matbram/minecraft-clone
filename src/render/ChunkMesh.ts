@@ -210,6 +210,9 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
 
         // Cross-billboard plants: emit two cut-out quads and skip the cube path.
         if (IS_CROSS[b]) {
+          // Phase 15.3: FIRE is drawn as glowing voxel cubes by FireRenderer, not as a flat
+          // billboard — skip its quad here (it's still a light-emitting, non-solid block).
+          if (b === Block.FIRE) continue;
           const sky = skyAt(wx, y, wz) / 15;
           const blk = blockLightAt(wx, y, wz) / 15;
           const t = CROSS_TINTED[b] ? bdef.grassTint : [1, 1, 1];

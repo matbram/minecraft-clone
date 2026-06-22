@@ -146,6 +146,11 @@ export class World {
     return this.fireSim.count;
   }
 
+  // Phase 15.3: enumerate active fires (for the voxel-flame renderer).
+  forEachFire(cb: (x: number, y: number, z: number, age: number, life: number, flaming: boolean) => void): void {
+    this.fireSim.forEachFire(cb);
+  }
+
   // After a chunk's persisted edits are replayed, re-derive its fluid state: water
   // cells recompute their true level (flowing reloads as a source-level 0 until
   // re-simulated) or drain, and dug-out AIR cells let neighboring water flow back

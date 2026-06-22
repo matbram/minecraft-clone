@@ -45,6 +45,17 @@ world.editBlock(bx + 1, h + 4, bz, Block.AIR); // ensure the ignition cell is ai
 const logsBefore = colYs.filter((y) => world.getBlockWorld(bx, y, bz) === Block.LOG).length;
 world.ignite(bx + 1, h + 4, bz, 2); // short life so the test resolves quickly
 
+// 2b. forEachFire (Phase 15.3) enumerates exactly the active fires + reports flaming.
+let enumerated = 0;
+let anyFlaming = false;
+world.forEachFire((_x, _y, _z, _age, _life, flaming) => {
+  enumerated++;
+  if (flaming) anyFlaming = true;
+});
+const enumOk = enumerated === world.activeFireCount && enumerated >= 1 && anyFlaming;
+console.log(`forEachFire: enumerated=${enumerated} activeCount=${world.activeFireCount} flaming=${anyFlaming} -> ${enumOk ? 'OK' : 'FAIL'}`);
+pass &&= enumOk;
+
 // 3. Tick the sim. Track peak fire count (spread => >1) and that the cap holds.
 let peak = 0;
 for (let i = 0; i < 1000; i++) {
