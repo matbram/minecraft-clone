@@ -12,6 +12,7 @@ import {
   MAX_GEN_PER_FRAME,
   MAX_MESH_PER_FRAME,
   MAX_LIGHT_PER_FRAME,
+  MAX_WATER_MESH_PER_FRAME,
   worldToChunk,
 } from '../core/constants';
 import { Chunk } from '../core/Chunk';
@@ -40,6 +41,7 @@ export class ChunkManager {
 
   private meshDirty = new Set<string>();
   private lightDirty = new Set<string>(); // chunks whose light needs computing
+  private waterDirty = new Set<string>(); // Phase 17: water-surface-only rebuilds (fast)
   private pcx = Number.NaN;
   private pcz = Number.NaN;
 
@@ -50,6 +52,8 @@ export class ChunkManager {
 
     this.scheduler.onChunk = (resp) => this.onChunk(resp);
     this.world.onDirty = (cx, cz) => this.meshDirty.add(chunkKey(cx, cz));
+    // Phase 17: a fluid change rebuilds just the water sheet fast (real-time fill).
+    this.world.onWaterDirty = (cx, cz) => this.waterDirty.add(chunkKey(cx, cz));
     // Phase 15.1: bulk edits (explosion craters) ask for a full relight + remesh per chunk.
     this.world.onRelight = (cx, cz) => this.queueRelight(cx, cz);
   }
@@ -116,6 +120,19 @@ export class ChunkManager {
     this.scheduler.pump(MAX_GEN_PER_FRAME);
     this.processLightQueue(MAX_LIGHT_PER_FRAME); // light BEFORE meshing
     this.processMeshQueue(MAX_MESH_PER_FRAME);
+    this.processWaterQueue(MAX_WATER_MESH_PER_FRAME); // Phase 17: fast water-sheet rebuilds
+  }
+
+  // Phase 17: dirty keys ordered nearest-camera-first, so the void you're watching fills
+  // (and remeshes) before far chunks.
+  private byDistance(keys: Iterable<string>): string[] {
+    return [...keys].sort((a, b) => {
+      const [ax, az] = parseKey(a);
+      const [bx, bz] = parseKey(b);
+      const da = (ax - this.pcx) ** 2 + (az - this.pcz) ** 2;
+      const db = (bx - this.pcx) ** 2 + (bz - this.pcz) ** 2;
+      return da - db;
+    });
   }
 
   private refreshRings(): void {
@@ -129,6 +146,7 @@ export class ChunkManager {
         this.renderer.removeChunk(cx, cz);
         this.world.removeChunk(cx, cz);
         this.meshDirty.delete(key);
+        this.waterDirty.delete(key);
       }
     }
 
@@ -231,7 +249,7 @@ export class ChunkManager {
 
   private processMeshQueue(max: number): void {
     let built = 0;
-    for (const key of [...this.meshDirty]) {
+    for (const key of this.byDistance(this.meshDirty)) {
       if (built >= max) break;
       const [cx, cz] = parseKey(key);
       const chunk = this.world.getChunk(cx, cz);
@@ -258,6 +276,34 @@ export class ChunkManager {
       this.renderer.setChunk(cx, cz, builtMesh, waterMesh);
       chunk.dirty = false;
       this.meshDirty.delete(key);
+      this.waterDirty.delete(key); // setChunk rebuilt the sheet too -> no redundant pass
+      built++;
+    }
+  }
+
+  // Phase 17: rebuild ONLY the water surface for fluid-changed chunks, on a higher budget
+  // than the block mesh, so a filling crater / spreading flow updates in real time. The
+  // block side-lips / underside catch up via the (slower) block mesh queue.
+  private processWaterQueue(max: number): void {
+    let built = 0;
+    for (const key of this.byDistance(this.waterDirty)) {
+      if (built >= max) break;
+      const [cx, cz] = parseKey(key);
+      const chunk = this.world.getChunk(cx, cz);
+      if (!chunk) {
+        this.waterDirty.delete(key);
+        continue;
+      }
+      if (!this.withinRender(cx, cz)) {
+        this.waterDirty.delete(key);
+        continue;
+      }
+      // The sheet samples neighbour columns at seams -> need neighbours present + lit.
+      if (!this.neighborsReady(cx, cz) || !chunk.lit || !this.neighborsLit(cx, cz)) {
+        continue;
+      }
+      this.renderer.setWater(cx, cz, buildWaterMesh(this.world, cx, cz));
+      this.waterDirty.delete(key);
       built++;
     }
   }

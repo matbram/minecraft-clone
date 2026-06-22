@@ -33,6 +33,10 @@ export class World {
   // Phase 15.1: set by ChunkManager — a bulk edit (e.g. an explosion crater) asks for a
   // full RELIGHT + remesh of a chunk (clear + recompute), vs onDirty which only remeshes.
   onRelight: (cx: number, cz: number) => void = () => {};
+  // Phase 17: set by ChunkManager — a FLUID change asks for a fast water-surface-only
+  // rebuild (a light, higher-budget queue), so a void fills in real time. The block mesh
+  // (side lips / underside) catches up via the normal onDirty channel (also fired).
+  onWaterDirty: (cx: number, cz: number) => void = () => {};
 
   private readonly lightEngine = new LightEngine(this);
   private readonly fluidSim = new FluidSim(this);
@@ -129,7 +133,8 @@ export class World {
     if (chunk.getBlock(lx, wy, lz) === block && chunk.getFluid(lx, wy, lz) === newFluid) return false;
     chunk.setBlock(lx, wy, lz, block);
     chunk.setFluid(lx, wy, lz, newFluid);
-    this.markDirtyAround(cx, cz, lx, lz);
+    this.markDirtyAround(cx, cz, lx, lz); // block side-lips / underside catch up
+    this.markWaterDirtyAround(cx, cz, lx, lz); // water sheet rebuilds fast (real-time fill)
     return true;
   }
 
@@ -382,6 +387,19 @@ export class World {
     if (lx === CX - 1) this.markDirty(cx + 1, cz);
     if (lz === 0) this.markDirty(cx, cz - 1);
     if (lz === CZ - 1) this.markDirty(cx, cz + 1);
+  }
+
+  // Phase 17: same edge-aware fan-out, but for the fast water-surface-only rebuild queue
+  // (the sheet samples neighbour columns at seams, so a seam cell dirties the neighbour).
+  private markWaterDirty(cx: number, cz: number): void {
+    if (this.getChunk(cx, cz)) this.onWaterDirty(cx, cz);
+  }
+  markWaterDirtyAround(cx: number, cz: number, lx: number, lz: number): void {
+    this.markWaterDirty(cx, cz);
+    if (lx === 0) this.markWaterDirty(cx - 1, cz);
+    if (lx === CX - 1) this.markWaterDirty(cx + 1, cz);
+    if (lz === 0) this.markWaterDirty(cx, cz - 1);
+    if (lz === CZ - 1) this.markWaterDirty(cx, cz + 1);
   }
 
   // Requeue the 4 edge neighbors of a chunk (used after a new chunk loads so

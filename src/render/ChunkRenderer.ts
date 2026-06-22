@@ -55,6 +55,18 @@ export class ChunkRenderer {
     this.applyWater(entry, cx, cz, water);
   }
 
+  // Phase 17: rebuild ONLY the water surface for a chunk (the fast real-time-fill path,
+  // independent of the heavier block remesh). Creates a water-only entry if needed.
+  setWater(cx: number, cz: number, water: WaterMeshArrays | null): void {
+    const key = chunkKey(cx, cz);
+    let entry = this.meshes.get(key);
+    if (!entry) {
+      entry = {};
+      this.meshes.set(key, entry);
+    }
+    this.applyWater(entry, cx, cz, water);
+  }
+
   // Phase 17: gate the water surface visibility on the quality preset (waterSurface).
   setWaterEnabled(on: boolean): void {
     if (on === this.waterVisible) return;
