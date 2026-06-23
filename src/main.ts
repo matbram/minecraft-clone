@@ -47,6 +47,7 @@ import { raycastVoxel } from './interaction/Raycast';
 import { findLandSpawn } from './core/WorldGen';
 import { World } from './world/World';
 import { GenScheduler } from './gen/GenScheduler';
+import { MeshScheduler } from './gen/MeshScheduler';
 import { buildAtlas } from './render/atlas';
 import { buildCrackAtlas } from './render/crackAtlas';
 import { createMaterials } from './render/materials';
@@ -206,10 +207,11 @@ const world = new World(seed);
 world.load();
 
 const scheduler = new GenScheduler(seed);
+const meshScheduler = new MeshScheduler(); // Phase 18.1: off-thread chunk meshing pool
 // Phase 17: the continuous water surface is its own material (shares materials.shared).
 const waterMaterial = createWaterMaterial(materials.shared);
 const chunkRenderer = new ChunkRenderer(scene, materials, waterMaterial);
-const chunkManager = new ChunkManager(world, scheduler, chunkRenderer);
+const chunkManager = new ChunkManager(world, scheduler, chunkRenderer, meshScheduler);
 
 // --- player + interaction --------------------------------------------------
 const input = new Input(renderer.domElement);

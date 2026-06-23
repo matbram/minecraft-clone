@@ -10,24 +10,24 @@ import {
   RENDER_DISTANCE,
   UNLOAD_MARGIN,
   MAX_GEN_PER_FRAME,
-  MAX_MESH_PER_FRAME,
   MAX_LIGHT_PER_FRAME,
-  MAX_WATER_MESH_PER_FRAME,
   worldToChunk,
 } from '../core/constants';
+import { Tunables } from '../core/tunables';
 import { Chunk } from '../core/Chunk';
 import { World } from '../world/World';
 import { chunkKey, parseKey } from '../world/chunkKey';
 import { GenScheduler } from '../gen/GenScheduler';
 import type { GenResponse } from '../gen/workerProtocol';
+import { MeshScheduler } from '../gen/MeshScheduler';
+import type { MeshChunkData, MeshKind, MeshRequest, MeshResponse } from '../gen/meshProtocol';
 import { ChunkRenderer } from '../render/ChunkRenderer';
-import { buildChunkMesh } from '../render/ChunkMesh';
-import { buildWaterMesh } from '../render/water/WaterSurfaceMesh';
 
 export class ChunkManager {
   private readonly world: World;
   private readonly scheduler: GenScheduler;
   private readonly renderer: ChunkRenderer;
+  private readonly meshScheduler: MeshScheduler;
 
   // Render distance is runtime-adjustable (quality presets). Generation ring is
   // one chunk wider so every rendered chunk has neighbors for seams + lighting.
@@ -42,15 +42,19 @@ export class ChunkManager {
   private meshDirty = new Set<string>();
   private lightDirty = new Set<string>(); // chunks whose light needs computing
   private waterDirty = new Set<string>(); // Phase 17: water-surface-only rebuilds (fast)
+  private inFlight = new Set<string>(); // Phase 18.1: chunks with a mesh job in a worker now
+  private nextMeshId = 1;
   private pcx = Number.NaN;
   private pcz = Number.NaN;
 
-  constructor(world: World, scheduler: GenScheduler, renderer: ChunkRenderer) {
+  constructor(world: World, scheduler: GenScheduler, renderer: ChunkRenderer, meshScheduler: MeshScheduler) {
     this.world = world;
     this.scheduler = scheduler;
     this.renderer = renderer;
+    this.meshScheduler = meshScheduler;
 
     this.scheduler.onChunk = (resp) => this.onChunk(resp);
+    this.meshScheduler.onResult = (res) => this.onMeshResult(res); // Phase 18.1: off-thread meshing
     this.world.onDirty = (cx, cz) => this.meshDirty.add(chunkKey(cx, cz));
     // Phase 17: a fluid change rebuilds just the water sheet fast (real-time fill).
     this.world.onWaterDirty = (cx, cz) => this.waterDirty.add(chunkKey(cx, cz));
@@ -73,7 +77,7 @@ export class ChunkManager {
     return this.world.chunks.size;
   }
   get meshQueueLength(): number {
-    return this.meshDirty.size;
+    return this.meshDirty.size + this.inFlight.size;
   }
   get lightQueueLength(): number {
     return this.lightDirty.size;
@@ -119,20 +123,13 @@ export class ChunkManager {
 
     this.scheduler.pump(MAX_GEN_PER_FRAME);
     this.processLightQueue(MAX_LIGHT_PER_FRAME); // light BEFORE meshing
-    this.processMeshQueue(MAX_MESH_PER_FRAME);
-    this.processWaterQueue(MAX_WATER_MESH_PER_FRAME); // Phase 17: fast water-sheet rebuilds
+    this.dispatchMeshJobs(); // Phase 18.1: meshing runs in the worker pool (off the main thread)
   }
 
-  // Phase 17: dirty keys ordered nearest-camera-first, so the void you're watching fills
-  // (and remeshes) before far chunks.
-  private byDistance(keys: Iterable<string>): string[] {
-    return [...keys].sort((a, b) => {
-      const [ax, az] = parseKey(a);
-      const [bx, bz] = parseKey(b);
-      const da = (ax - this.pcx) ** 2 + (az - this.pcz) ** 2;
-      const db = (bx - this.pcx) ** 2 + (bz - this.pcz) ** 2;
-      return da - db;
-    });
+  // Squared distance from a chunk key to the player chunk (nearest-first ordering).
+  private dist2(key: string): number {
+    const [x, z] = parseKey(key);
+    return (x - this.pcx) ** 2 + (z - this.pcz) ** 2;
   }
 
   private refreshRings(): void {
@@ -247,64 +244,76 @@ export class ChunkManager {
     }
   }
 
-  private processMeshQueue(max: number): void {
-    let built = 0;
-    for (const key of this.byDistance(this.meshDirty)) {
-      if (built >= max) break;
+  // Phase 18.1: dispatch mesh jobs to the worker pool (nearest-camera first), filling free
+  // workers. The heavy buildChunkMesh/buildWaterMesh runs off the main thread; geometry is
+  // built from the returned typed arrays in onMeshResult. `full` jobs (meshDirty) rebuild
+  // opaque+transparent+water; `water` jobs (waterDirty only) rebuild just the sheet (the
+  // real-time-fill fast path). One in-flight job per chunk at a time.
+  private dispatchMeshJobs(): void {
+    let free = this.meshScheduler.freeCount;
+    if (free === 0) return;
+
+    const candidates: { key: string; kind: MeshKind }[] = [];
+    for (const key of this.meshDirty) candidates.push({ key, kind: 'full' });
+    for (const key of this.waterDirty) if (!this.meshDirty.has(key)) candidates.push({ key, kind: 'water' });
+    candidates.sort((a, b) => this.dist2(a.key) - this.dist2(b.key));
+
+    for (const { key, kind } of candidates) {
+      if (free === 0) break;
+      if (this.inFlight.has(key)) continue; // already meshing this chunk
       const [cx, cz] = parseKey(key);
       const chunk = this.world.getChunk(cx, cz);
-      if (!chunk) {
+      if (!chunk || !this.withinRender(cx, cz)) {
         this.meshDirty.delete(key);
+        this.waterDirty.delete(key);
         continue;
       }
-      if (!this.withinRender(cx, cz)) {
-        this.meshDirty.delete(key);
+      // Seam culling + smooth light read neighbours -> need them present + lit.
+      if (!this.neighborsReady(cx, cz) || !chunk.lit || !this.neighborsLit(cx, cz)) continue;
+      if (kind === 'full' && !chunk.dirty && this.renderer.has(cx, cz)) {
+        this.meshDirty.delete(key); // already up to date
         continue;
       }
-      if (!this.neighborsReady(cx, cz)) {
-        continue; // retry next frame once neighbors generate
+
+      if (!this.meshScheduler.dispatch(this.assembleRequest(cx, cz, kind))) break; // pool saturated
+      this.inFlight.add(key);
+      this.waterDirty.delete(key);
+      if (kind === 'full') {
+        chunk.dirty = false;
+        this.meshDirty.delete(key); // a full job rebuilds the sheet too
       }
-      if (!chunk.lit || !this.neighborsLit(cx, cz)) {
-        continue; // wait until this chunk + neighbors are lit (smooth lighting)
-      }
-      if (!chunk.dirty && this.renderer.has(cx, cz)) {
-        this.meshDirty.delete(key);
-        continue;
-      }
-      const builtMesh = buildChunkMesh(this.world, cx, cz);
-      const waterMesh = buildWaterMesh(this.world, cx, cz);
-      this.renderer.setChunk(cx, cz, builtMesh, waterMesh);
-      chunk.dirty = false;
-      this.meshDirty.delete(key);
-      this.waterDirty.delete(key); // setChunk rebuilt the sheet too -> no redundant pass
-      built++;
+      free--;
     }
   }
 
-  // Phase 17: rebuild ONLY the water surface for fluid-changed chunks, on a higher budget
-  // than the block mesh, so a filling crater / spreading flow updates in real time. The
-  // block side-lips / underside catch up via the (slower) block mesh queue.
-  private processWaterQueue(max: number): void {
-    let built = 0;
-    for (const key of this.byDistance(this.waterDirty)) {
-      if (built >= max) break;
-      const [cx, cz] = parseKey(key);
-      const chunk = this.world.getChunk(cx, cz);
-      if (!chunk) {
-        this.waterDirty.delete(key);
-        continue;
+  // Snapshot the target + its present neighbours' block/light/fluid arrays for a worker job.
+  // postMessage structured-clones these (the live arrays stay intact on the main thread).
+  private assembleRequest(cx: number, cz: number, kind: MeshKind): MeshRequest {
+    const self = this.world.getChunk(cx, cz)!;
+    const chunks: MeshChunkData[] = [
+      { cx, cz, data: self.data, light: self.light, fluid: self.fluid, maxY: self.maxY, biome: self.biomeMap },
+    ];
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dz === 0) continue;
+        const n = this.world.getChunk(cx + dx, cz + dz);
+        if (n) chunks.push({ cx: n.cx, cz: n.cz, data: n.data, light: n.light, fluid: n.fluid, maxY: n.maxY });
       }
-      if (!this.withinRender(cx, cz)) {
-        this.waterDirty.delete(key);
-        continue;
-      }
-      // The sheet samples neighbour columns at seams -> need neighbours present + lit.
-      if (!this.neighborsReady(cx, cz) || !chunk.lit || !this.neighborsLit(cx, cz)) {
-        continue;
-      }
-      this.renderer.setWater(cx, cz, buildWaterMesh(this.world, cx, cz));
-      this.waterDirty.delete(key);
-      built++;
+    }
+    return { id: this.nextMeshId++, cx, cz, kind, waterAbsorb: Tunables.waterAbsorb, chunks };
+  }
+
+  // A worker finished meshing: build the GPU geometry on the main thread + swap it in.
+  // Drop if the chunk unloaded / left the ring mid-flight; if it was re-dirtied during the
+  // job it's already back in meshDirty/waterDirty and will re-dispatch next frame.
+  private onMeshResult(res: MeshResponse): void {
+    const key = chunkKey(res.cx, res.cz);
+    this.inFlight.delete(key);
+    if (!this.world.getChunk(res.cx, res.cz) || !this.withinRender(res.cx, res.cz)) return;
+    if (res.kind === 'full') {
+      this.renderer.setChunk(res.cx, res.cz, { opaque: res.opaque, transparent: res.transparent }, res.water);
+    } else {
+      this.renderer.setWater(res.cx, res.cz, res.water);
     }
   }
 }
