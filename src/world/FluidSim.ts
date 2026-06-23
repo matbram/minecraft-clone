@@ -1,8 +1,8 @@
 // Phase 6: Minecraft-style flowing water. Main-thread, no THREE. Owned by World
-// (like LightEngine). Cells are scheduled into a delayed queue; each fixed step
-// (20 TPS) the driver processes a capped number of due cells. Each cell update is
-// O(1) and ENQUEUES follow-ups rather than recursing, so a flow naturally spreads
-// its cost across ticks and respects the per-tick op cap.
+// (like LightEngine). Cells are scheduled into a bucketed queue; each fixed step
+// (20 TPS) the driver floods the due cells AND their cascade to equilibrium within
+// that step (Phase 18.3 — instant fill), bounded by the per-tick op cap so a giant
+// breach still spreads its cost across ticks instead of freezing the frame.
 //
 // Rules (per cell):
 //  - AIR with water above -> becomes FALLING water (full height).
@@ -29,6 +29,10 @@ export class FluidSim {
   private readonly buckets: string[][] = Array.from({ length: FLUID_BUCKETS }, () => []);
   private readonly queued = new Set<string>();
   private tickCounter = 0;
+  // Phase 18.3: while draining a tick we re-enqueue cascade follow-ups into the CURRENT
+  // bucket (delay 0) instead of the next one, so a fill/drain completes within a single
+  // fixed step (instant) rather than advancing one ring per tick. Bounded by maxOps.
+  private draining = false;
 
   constructor(world: World) {
     this.world = world;
@@ -47,7 +51,9 @@ export class FluidSim {
   enqueue(wx: number, wy: number, wz: number): void {
     if (wy < 0 || wy >= CY) return;
     if (!this.loaded(wx, wz)) return; // resumes when the chunk loads (rehydrate)
-    this.enqueueKey(`${wx},${wy},${wz}`, FLUID_TICK_DELAY);
+    // delay 0 while draining -> the follow-up is processed THIS tick (instant flood);
+    // FLUID_TICK_DELAY for external enqueues (edits) -> picked up at the start of next tick.
+    this.enqueueKey(`${wx},${wy},${wz}`, this.draining ? 0 : FLUID_TICK_DELAY);
   }
 
   enqueueAround(wx: number, wy: number, wz: number): void {
@@ -60,23 +66,31 @@ export class FluidSim {
     this.enqueue(wx, wy, wz - 1);
   }
 
-  // Drain this tick's bucket: process up to maxOps cells, defer the rest to next tick.
+  // Drain this tick's bucket AND every follow-up it cascades, so a fill/drain settles
+  // within ONE fixed step (instant) — not one ring per tick. updateCell's enqueues land
+  // back in this bucket (delay 0 while draining) and the while-loop keeps draining until
+  // equilibrium or the op cap. Overflow defers to the next tick, so a giant breach still
+  // spreads its cost across ticks (never freezes the frame).
   tick(maxOps: number): void {
     this.tickCounter++;
     const b = this.tickCounter % FLUID_BUCKETS;
-    const list = this.buckets[b];
-    this.buckets[b] = []; // swap out so updateCell's new enqueues don't grow this list
     let ops = 0;
-    for (const key of list) {
-      this.queued.delete(key);
-      if (ops < maxOps) {
-        const c = key.split(',');
-        this.updateCell(+c[0], +c[1], +c[2]);
-        ops++;
-      } else {
-        this.enqueueKey(key, 1); // overflow -> next tick
+    this.draining = true;
+    while (this.buckets[b].length > 0 && ops < maxOps) {
+      const list = this.buckets[b];
+      this.buckets[b] = []; // swap out; cascade enqueues refill it for the next pass
+      for (const key of list) {
+        this.queued.delete(key);
+        if (ops < maxOps) {
+          const c = key.split(',');
+          this.updateCell(+c[0], +c[1], +c[2]);
+          ops++;
+        } else {
+          this.enqueueKey(key, 1); // overflow -> next tick (explicit delay, not draining)
+        }
       }
     }
+    this.draining = false;
   }
 
   // Phase 16/18: horizontal flow direction at a cell = downhill gradient of the water
