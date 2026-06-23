@@ -13,10 +13,9 @@ import { Tunables } from '../core/tunables';
 import { Block, IS_TRANSPARENT, IS_FOLIAGE, IS_CROSS, CROSS_TINTED, tileOf, ATLAS_COLS } from '../core/BlockTypes';
 import { BIOMES, type Biome } from '../core/biome';
 import { fluidSurfaceHeight } from '../core/fluid';
-import type { Chunk } from '../core/Chunk';
 import { idx } from '../core/constants';
-import type { World } from '../world/World';
-import { ATLAS_ROWS, TILE_PX } from './atlas';
+import type { MeshWorld, MeshChunk } from './meshWorld';
+import { ATLAS_ROWS, TILE_PX } from './atlasLayout';
 import { waterCornerHeight } from './water/waterHeight';
 
 export interface MeshArrays {
@@ -94,7 +93,7 @@ function finalize(a: Accum): MeshArrays | null {
   };
 }
 
-export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk {
+export function buildChunkMesh(world: MeshWorld, cx: number, cz: number): BuiltChunk {
   const self = world.getChunk(cx, cz);
   if (!self) return { opaque: null, transparent: null };
 
@@ -108,7 +107,7 @@ export function buildChunkMesh(world: World, cx: number, cz: number): BuiltChunk
 
   // Neighbor-aware chunk lookup (cached refs for the 4 orthogonal neighbors;
   // diagonal corners fall back to a Map hit).
-  const chunkAt = (wx: number, wz: number): Chunk | undefined => {
+  const chunkAt = (wx: number, wz: number): MeshChunk | undefined => {
     const ccx = worldToChunk(wx);
     const ccz = worldToChunk(wz);
     if (ccx === cx && ccz === cz) return self;

@@ -15,7 +15,8 @@
 
 import { CY, worldToChunk, FLUID_MAX_LEVEL, FLUID_TICK_DELAY, FLUID_BUCKETS } from '../core/constants';
 import { Block, IS_SOLID } from '../core/BlockTypes';
-import { levelOf, isFalling, makeFluid, fluidSurfaceHeight } from '../core/fluid';
+import { levelOf, isFalling, makeFluid } from '../core/fluid';
+import { computeFlow } from './flow';
 import type { World } from './World';
 
 export class FluidSim {
@@ -78,44 +79,18 @@ export class FluidSim {
     }
   }
 
-  // Phase 16: horizontal flow direction at a cell = downhill gradient of the water surface
-  // height across the 4 neighbours (toward lower water / open air). ~0 in a still pool or a
-  // flat ocean (all sources at height 1.0). Used to push the player along a current.
+  // Phase 16/18: horizontal flow direction at a cell = downhill gradient of the water
+  // surface (toward lower water / open air). ~0 in a still pool or a flat ocean. Used to
+  // push the player along a current. Delegates to the shared pure helper (also used by the
+  // meshing worker) via bound samplers (allocated once — flowAt runs every physics tick).
   flowAt(wx: number, wy: number, wz: number, out: { x: number; z: number }): void {
-    out.x = 0;
-    out.z = 0;
-    if (this.world.getBlockWorld(wx, wy, wz) !== Block.WATER) return;
-    const h = this.surfaceHeightAt(wx, wy, wz);
-    const dirs = [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ];
-    for (const [dx, dz] of dirs) {
-      const nb = this.world.getBlockWorld(wx + dx, wy, wz + dz);
-      if (nb !== Block.AIR && nb !== Block.WATER) continue; // wall: no flow that way
-      const nh = nb === Block.AIR ? 0 : this.surfaceHeightAt(wx + dx, wy, wz + dz);
-      const drop = h - nh;
-      if (drop > 0) {
-        out.x += dx * drop;
-        out.z += dz * drop;
-      }
-    }
-    const len = Math.hypot(out.x, out.z);
-    if (len > 1e-4) {
-      out.x /= len;
-      out.z /= len;
-    } else {
-      out.x = 0;
-      out.z = 0;
-    }
+    computeFlow(this.blockSampler, this.fluidSampler, wx, wy, wz, out);
   }
 
-  private surfaceHeightAt(wx: number, wy: number, wz: number): number {
-    const above = this.world.getBlockWorld(wx, wy + 1, wz) === Block.WATER;
-    return fluidSurfaceHeight(Block.WATER, this.world.getFluidWorld(wx, wy, wz), above);
-  }
+  private readonly blockSampler = (wx: number, wy: number, wz: number): Block =>
+    this.world.getBlockWorld(wx, wy, wz);
+  private readonly fluidSampler = (wx: number, wy: number, wz: number): number =>
+    this.world.getFluidWorld(wx, wy, wz);
 
   // Min incoming level (neighbor level + 1) over horizontal water neighbors, and
   // the count of horizontal SOURCE neighbors. lmin > FLUID_MAX_LEVEL => no feeder.

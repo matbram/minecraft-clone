@@ -11,8 +11,8 @@ import { CX, CZ, CY, mod, worldToChunk, SKY_DEFAULT } from '../../core/constants
 import { idx } from '../../core/constants';
 import { Block } from '../../core/BlockTypes';
 import { fluidSurfaceHeight } from '../../core/fluid';
-import type { Chunk } from '../../core/Chunk';
-import type { World } from '../../world/World';
+import { computeFlow } from '../../world/flow';
+import type { MeshWorld, MeshChunk } from '../meshWorld';
 import { waterCornerHeight, waterCornerFoam } from './waterHeight';
 
 export interface WaterMeshArrays {
@@ -26,7 +26,7 @@ export interface WaterMeshArrays {
 
 const DEPTH_CAP = 24; // blocks of water thickness to sample for the depth-colour hint
 
-export function buildWaterMesh(world: World, cx: number, cz: number): WaterMeshArrays | null {
+export function buildWaterMesh(world: MeshWorld, cx: number, cz: number): WaterMeshArrays | null {
   const self = world.getChunk(cx, cz);
   if (!self) return null;
 
@@ -37,7 +37,7 @@ export function buildWaterMesh(world: World, cx: number, cz: number): WaterMeshA
   const baseX = cx * CX;
   const baseZ = cz * CZ;
 
-  const chunkAt = (wx: number, wz: number): Chunk | undefined => {
+  const chunkAt = (wx: number, wz: number): MeshChunk | undefined => {
     const ccx = worldToChunk(wx);
     const ccz = worldToChunk(wz);
     if (ccx === cx && ccz === cz) return self;
@@ -105,7 +105,8 @@ export function buildWaterMesh(world: World, cx: number, cz: number): WaterMeshA
         const f10 = waterCornerFoam(blockAt, wx, y, wz, 1, 0);
 
         // Flow direction (downhill gradient) — biases the ripple normal + foam streaks.
-        world.flowDir(wx, y, wz, flowOut);
+        // Pure helper over this mesh's own samplers (no World/FluidSim) -> worker-safe.
+        computeFlow(blockAt, fluidAt, wx, y, wz, flowOut);
         const fx = flowOut.x;
         const fz = flowOut.z;
 

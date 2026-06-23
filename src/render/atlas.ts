@@ -6,9 +6,10 @@
 
 import * as THREE from 'three';
 import { ATLAS_COLS, ATLAS_TILES, Tile } from '../core/BlockTypes';
-
-export const TILE_PX = 16;
-export const ATLAS_ROWS = Math.ceil(ATLAS_TILES / ATLAS_COLS);
+// Layout constants live in a THREE-free module so the mesher/worker can import them;
+// re-exported here so existing main-thread importers of './atlas' are unaffected.
+import { TILE_PX, ATLAS_ROWS } from './atlasLayout';
+export { TILE_PX, ATLAS_ROWS };
 
 // Small deterministic PRNG so the generated texture is identical every run.
 function mulberry32(seed: number): () => number {
