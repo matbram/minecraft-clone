@@ -99,6 +99,10 @@ export class Composer {
     (this.godrays.uniforms.uSunUv.value as THREE.Vector2).set(sunUv.x, sunUv.y);
     this.godrays.uniforms.uVisible.value = visible ? 1 : 0;
     this.godrays.uniforms.uExposure.value = GODRAYS_EXPOSURE * intensity;
+    // Phase 18.3: skip the whole full-screen 50-sample pass when the sun/moon isn't on
+    // screen / is below the horizon / faded out in space — instead of running it to
+    // discard via uVisible. Pure win (identical image; ACES stays the last enabled pass).
+    this.godrays.enabled = visible && intensity > 0.01;
   }
 
   // Live "Brightness" knob (Tuning panel): ACES exposure. Only affects the post path.

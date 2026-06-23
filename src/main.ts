@@ -933,19 +933,18 @@ function frame(now: number): void {
     camera.updateMatrixWorld();
   }
 
-  // Phase 4b (Cinematic): sun-depth pass first so reflected terrain is shadowed
-  // too, then the planar water reflection. Both restore render target/override.
+  // Phase 4b (Cinematic): sun-depth pass first so reflected terrain is shadowed too.
   if (settings.shadows) shadowMapper.render(renderer, scene, camera.position, dayNight);
-  if (settings.waterReflections) planarReflection.render(renderer, scene, camera);
-  // Phase 17 (Cinematic): capture the opaque scene + depth for water refraction. Skip when
-  // submerged (the surface is back-face culled from below; WaterCeiling handles it) and when
-  // no water is on screen (deserts/caves/looking away cost nothing — one extra full-scene
-  // render only when it's actually needed).
-  if (settings.waterRefraction && !submerged && chunkRenderer.waterOnScreen(camera)) {
-    sceneCapture.capture(renderer, scene, camera);
-  } else {
-    sceneCapture.setActive(false);
-  }
+  // Phase 18.3: the planar reflection AND the refraction scene-capture are each a full
+  // extra (half-res) scene render. Neither is sampled unless water is actually on screen,
+  // so gate BOTH on one frustum check (skip entirely over land/desert/mountains or when
+  // submerged — the surface is back-face culled from below / WaterCeiling handles it).
+  const waterVisible =
+    !submerged && (settings.waterReflections || settings.waterRefraction) && chunkRenderer.waterOnScreen(camera);
+  if (settings.waterReflections && waterVisible) planarReflection.render(renderer, scene, camera);
+  else planarReflection.setActive(false);
+  if (settings.waterRefraction && waterVisible) sceneCapture.capture(renderer, scene, camera);
+  else sceneCapture.setActive(false);
 
   if (settings.usePost) {
     if (settings.godRays) {
