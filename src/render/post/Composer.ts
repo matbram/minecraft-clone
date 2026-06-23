@@ -63,7 +63,13 @@ export class Composer {
   ) {
     const w = window.innerWidth;
     const h = window.innerHeight;
-    this.composer = new EffectComposer(renderer);
+    // Phase 18.2a: the post path renders the scene into an OFFSCREEN target, so the
+    // renderer's `antialias:true` (which only AAs the default framebuffer) does nothing
+    // on Medium/Cinematic -> aliased edges. Give the composer a MULTISAMPLED render
+    // target (WebGL2 MSAA, auto-resolved on read) to restore edge AA. EffectComposer
+    // clones it for its ping-pong buffer and preserves `samples` across setSize.
+    const msaa = new THREE.WebGLRenderTarget(w, h, { samples: 4 });
+    this.composer = new EffectComposer(renderer, msaa);
     this.composer.addPass(new RenderPass(scene, camera));
 
     // Underwater warp first so bloom/god-rays act on the distorted image.
