@@ -3,9 +3,9 @@
 // slots as the faithful atlas, so UVs are identical and the T toggle is a single
 // uniform swap.
 
-import * as THREE from 'three';
+import type * as THREE from 'three';
 import { ATLAS_COLS, ATLAS_TILES, Tile } from '../../core/BlockTypes';
-import { TILE_PX } from '../atlas';
+import { TILE_PX, configureBlockTexture } from '../atlas';
 import type { AtlasResult } from '../atlas';
 import type { TextureSource } from './TextureSource';
 
@@ -56,7 +56,7 @@ function paintSmooth(ctx: CanvasRenderingContext2D, x0: number, y0: number, c: R
   ctx.fillRect(x0 + TILE_PX - 1, y0, 1, TILE_PX);
 }
 
-export function buildSmoothAtlas(): AtlasResult {
+export function buildSmoothAtlas(anisotropy = 0): AtlasResult {
   const canvas = document.createElement('canvas');
   canvas.width = ATLAS_COLS * TILE_PX;
   canvas.height = TILE_PX; // single row (ATLAS_ROWS == 1)
@@ -105,21 +105,14 @@ export function buildSmoothAtlas(): AtlasResult {
     }
   }
 
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.flipY = false;
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.generateMipmaps = false;
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.needsUpdate = true;
-  return { texture: tex, canvas };
+  return { texture: configureBlockTexture(canvas, anisotropy), canvas };
 }
 
 export class ProceduralPackTextureSource implements TextureSource {
   readonly id = 'smooth';
   private readonly atlas: AtlasResult;
-  constructor() {
-    this.atlas = buildSmoothAtlas();
+  constructor(anisotropy = 0) {
+    this.atlas = buildSmoothAtlas(anisotropy);
   }
   getAtlas(): THREE.Texture {
     return this.atlas.texture;

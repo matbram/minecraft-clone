@@ -196,11 +196,14 @@ const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerH
 camera.layers.enable(LAYER_TRANSPARENT);
 
 // --- assets + systems ------------------------------------------------------
-const atlas = buildAtlas();
+// Phase 18.2b: anisotropic filtering + per-tile mipmaps on the block atlas (crisp distant
+// terrain, no shimmer). Anisotropy clamped to the GPU's max.
+const maxAniso = renderer.capabilities.getMaxAnisotropy();
+const atlas = buildAtlas(maxAniso);
 const materials = createMaterials(atlas.texture, skyColor);
 const textures = new TextureRegistry([
   new ProceduralTextureSource(atlas),
-  new ProceduralPackTextureSource(),
+  new ProceduralPackTextureSource(maxAniso),
 ]);
 
 const world = new World(seed);

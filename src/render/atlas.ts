@@ -373,14 +373,56 @@ export interface AtlasResult {
   canvas: HTMLCanvasElement; // for cropping block icons in the UI
 }
 
-export function buildAtlas(): AtlasResult {
-  const canvas = buildAtlasCanvas();
+// Phase 18.2b: a PER-TILE mipmap chain. Auto-mipmapping an adjacently-packed atlas bleeds
+// neighbouring tiles together at coarse mips (visible seams at distance); instead each tile
+// is downsampled WITHIN its own bounds. Level 0 = the base canvas; each subsequent level
+// halves until tiles are 1px. Derives the grid from the canvas so it works for either the
+// 3-row main atlas or the 1-row smooth pack.
+export function buildTileMipmaps(base: HTMLCanvasElement): HTMLCanvasElement[] {
+  const cols = Math.round(base.width / TILE_PX);
+  const rows = Math.round(base.height / TILE_PX);
+  const levels: HTMLCanvasElement[] = [base];
+  let prev = base;
+  let px = TILE_PX;
+  while (px > 1) {
+    const npx = px >> 1;
+    const next = document.createElement('canvas');
+    next.width = cols * npx;
+    next.height = rows * npx;
+    const ctx = next.getContext('2d')!;
+    ctx.clearRect(0, 0, next.width, next.height);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        // Box-downsample THIS tile from the previous level into its own slot only.
+        ctx.drawImage(prev, col * px, row * px, px, px, col * npx, row * npx, npx, npx);
+      }
+    }
+    levels.push(next);
+    prev = next;
+    px = npx;
+  }
+  return levels;
+}
+
+// Shared block-atlas texture config: crisp NearestFilter magnification (keeps the pixel
+// look up close) + trilinear minification over the per-tile mip chain (kills distant
+// shimmer) + anisotropy (grazing angles). Used by both procedural atlases.
+export function configureBlockTexture(canvas: HTMLCanvasElement, anisotropy = 0): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.flipY = false; // match canvas top-left origin to UV (0,0)
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter; // no mipmaps -> no tile bleeding
-  tex.generateMipmaps = false;
   tex.colorSpace = THREE.SRGBColorSpace;
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.generateMipmaps = false;
+  tex.mipmaps = buildTileMipmaps(canvas);
+  if (anisotropy > 1) tex.anisotropy = anisotropy;
   tex.needsUpdate = true;
-  return { texture: tex, canvas };
+  return tex;
+}
+
+export function buildAtlas(anisotropy = 0): AtlasResult {
+  const canvas = buildAtlasCanvas();
+  return { texture: configureBlockTexture(canvas, anisotropy), canvas };
 }
